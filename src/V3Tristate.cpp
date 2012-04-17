@@ -373,17 +373,21 @@ private:
 		if (!refp->user1p()) { // if no __en signal, then delete the entry
 		    complete = false;
 		} else {
+		    UINFO(9, "      Found refp w/ tristate enable: " << (AstVarRef*)refp->user1p() << endl);
 		    found_one++;
 		}
 	    }
 	    if (!complete) {
 		if (found_one) {
-		    UINFO(9, "       Problem mixing tristate and low-Z on " << lhsp << endl);
+		    UINFO(9, "       Problem mixing tristate and low-Z on " << nodep->name() << ' ' << lhsp->name() << endl);
 		    UINFO(9, "       Found " << found_one << " __en signals from of " << refs->size() << " possible drivers" << endl);
-		    // not sure what I should do here other than error that they are mixing low-Z and tristate drivers.
-		    // The other scenerio, and probably more likely, is that they are using a high-Z construct that
-		    // is not supported.  Improving the high-Z detection logic will reduce the occurance of this failure.
-		    nodep->v3error("Mixing tristate and low-Z drivers.  Perhaps you are using a high-Z construct not supported");
+		    // not sure what I should do here other than error that
+		    // they are mixing low-Z and tristate drivers.  The other
+		    // scenerio, and probably more likely, is that they are
+		    // using a high-Z construct that is not supported.
+		    // Improving the high-Z detection logic will reduce the
+		    // occurance of this failure.
+		    nodep->v3error("Mixing tristate and low-Z drivers.  Perhaps you are using a high-Z construct not supported.  Module: " << nodep->name() << " Signal: " << lhsp->name() );
 		} else  {
 		    UINFO(9, "       No tristates found on " << lhsp <<endl);
 		}
