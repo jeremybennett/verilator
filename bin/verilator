@@ -3407,6 +3407,208 @@ L<http://www.veripool.org/verilator>.  The bug will become publicly
 visible; if this is unacceptable, mail the bug report to
 C<wsnyder@wsnyder.org>.
 
+=head2 Test options
+
+The test driver accepts a number of options. For example the previous test
+could have been run with debugging enabled
+
+    cd test_regress
+    t/t_BUG.pl --debug
+
+Many of the options mirror the main verilator options. The full set can be seen by running the following command in the C<test_regress> directory.
+
+  ./driver.pl --help
+
+Useful options are:
+
+=over 4
+
+=item --verbose
+
+Run in verbose mode. This means C<TEST_VERBOSE> will be defined for the test
+(Verilog and any C++/SystemC wrapper).
+
+=item --debug
+
+Use the debug version of Verilator and run with more assertions and debugging
+messages enabled.
+
+=item --debugi <level>
+
+Run Verilator with the specified debug level (1-10). Higher levels produce
+more detailed messages (plain C<--debug> is equivalent to C<--debugi 4>).
+
+=item --dump-tree
+
+Produce dumps of the internal abstract syntax tree (AST) at various stages
+through the processing. For more details see the Verilator Internals manual.
+
+=item --atsim
+
+=item --ghdl
+
+=item --iv
+
+=item --nc
+
+=item --vcs
+
+Run the tests using atsim, GHDL, Icarus Verilog, Cadence NC or Synopsys VCS
+respectively instead of Verilator.
+
+=back
+
+=head2 Test Configuration
+
+The Perl script (C<t/t_BUG.pl> in this case) controls how the test will
+run. In general it includes a call to the C<compile> sub to compile the test
+with Verilator (or an alternative simulator if specified), followed by a call
+to the C<execute> sub to run the test. Compile-only tests omit the call to
+C<execute>.
+
+If those complete, the script calls C<ok(1)> to increment the count of
+successful tests and then returns 1 as its result.
+
+Both C<compile> and C<execute> take an optional argument hash table to control
+their behaviour. For example:
+
+  compile (
+           v_flags2 => ["--lint-only"],
+           fails=>1,
+    );
+
+would indicate that when compiling this test, the C<--lint-only> flag should
+be passed and that the test is expected to fail.
+
+The full list of arguments can be found by looking at the C<driver.pl>
+scription. Some commonly used arguments are
+
+=over 4
+
+=item fails
+
+Set to 1 to indicate this step (C<compile> or C<execute>) is expected to fail.
+
+=item check_finished
+
+Set to 1 to indicate successful completion of the test is indicated by the
+string C<*-* All Finished *-*> being printed on standard output. This is the
+normal way for successful tests to finish.
+
+=item expect
+
+A quoted list of strings to be matched in the output. See L</Hints on Writing
+Tests> for more detail on how this argument should be used.
+
+=item make_top_shell
+
+Set to 0 to indicate a top level shell to run the executable is not needed
+(for example when a hand-written test wrapper is provided using C<--exe>).
+
+=item make_main
+
+Set to 0 to indicate an automatic C++ test wrapper is not needed (for example
+when a hand-written test wrapper is provided using C<--exe>).
+
+=item v_flags
+
+A list of flags to be passed to the simulator compiler (Verilator or one of
+the other simulators).
+
+=item v_flags2
+
+A list of flags to be passed to the simulator compiler (Verilator or one of
+the other simulators). Unlike v_flags, these options may be overridden in some
+simulation files.
+
+=item all_run_flags
+
+A list of flags to be passed when running the simulator (Verilated model or
+one of the other simulators).
+
+=item iv_flags
+
+=item iv_flags2
+
+=item iv_run_flags
+
+The equivalent of C<v_flags>, C<v_flags2> and C<all_run_flags>, but only for
+use with the Icarus Verilog simulator.
+
+Similar sets of flags exist for atsim, GHDL, Cadence NC and Synopsys VCS.
+
+=item verilator_flags
+
+=item verilator_flags2
+
+The equivalent of C<v_flags> and C<v_flags2>, but only for use with Verilator.
+
+=back
+
+=head2 Hints on Writing Tests
+
+These suggestions may be helpful when writing your own tests.
+
+Some tests require their own C++ pr SystemC test harness. This is commonly
+given the same name as the test, but with .cpp as suffix (so in the example
+above, C<t_BUG.cpp>). There is no need for the test to create its own main
+program or top level shell. THis can be specified as follows:
+
+  compile (
+      make_top_shell   => 0,
+      make_main        => 0,
+      verilator_flags2 => ["--exe $Self->{t_dir}/$Self->{name}.cpp"], );
+
+Tests should be self-checking, rather than producing lots of output. If a test
+succeeds it should print C<*-* All Finished *-*> to standard output and
+terminate (in Verilog C<$finish>), if not it should just stop (in Verilog
+C<$stop>).
+
+If termination should be triggered from the C++ wrapper, the
+following code can be used:
+
+  vl_fatal (__FILE__, __LINE__, "dut", "<error message goes here>");
+  exit (1);
+
+This can be particularly useful if checking that the Verilator model has not
+unexpectedly terminated.
+
+  if (Verilated::gotFinish ()) {
+      vl_fatal (__FILE__, __LINE__, "dut", "<error message goes here>");
+      exit (1);
+  }
+
+Where it might be useful for a test to produce output, it should qualify this
+with C<TEST_VERBOSE>. For example in Verilog:
+
+  `ifdef TEST_VERBOSE
+        $write ("Conditional generate if MASK [%1d] = %d\n", g, MASK[g]);
+  `endif
+
+Or in a hand-written C++ wrapper:
+
+  #ifdef TEST_VERBOSE
+      cout << "Read  a     = " << a << endl;
+  #endif
+
+The C<expect> argument should not generally be used to decide if a test has
+succeeded. However, in the case of tests that are designed to fail at compile
+time, it is the only option. For example:
+
+  compile (
+           v_flags2 => ["--lint-only"],
+           fails=>1,
+           expect=>
+  q{%Error: t/t_gen_cond_bitrange_bad.v:\d+: Selection index out of range: 2:2 outside 1:0
+  %Error: t/t_gen_cond_bitrange_bad.v:\d+: Selection index out of range: 2:2 outside 1:0
+  %Error: t/t_gen_cond_bitrange_bad.v:\d+: Selection index out of range: 2:2 outside 1:0
+  %Error: t/t_gen_cond_bitrange_bad.v:\d+: Selection index out of range: 2:2 outside 1:0
+  %Error: Exiting due to .*},
+           );
+
+The strings to match should be made general - for example the line numbers in
+the Verilog should not be critical and the total number of errors should not
+matter. This makes it easier to extend or modify the test in future.
 
 =head1 HISTORY
 
