@@ -4,8 +4,6 @@
 //
 // Code available from: http://www.veripool.org/verilator
 //
-// AUTHORS: Wilson Snyder with Paul Wasson, Duane Gabli
-//
 //*************************************************************************
 //
 // Copyright 2003-2012 by Wilson Snyder.  This program is free software; you can
@@ -1558,7 +1556,8 @@ void EmitCImp::emitWrapEval(AstNodeModule* modp) {
     puts(    "_eval(vlSymsp);\n");
 #ifndef NEW_ORDERING
     puts(    "__Vchange = _change_request(vlSymsp);\n");
-    puts(    "if (++__VclockLoop > 100) vl_fatal(__FILE__,__LINE__,__FILE__,\"Verilated model didn't converge\");\n");
+    puts(    "if (++__VclockLoop > "+cvtToStr(v3Global.opt.convergeLimit())
+	     +") vl_fatal(__FILE__,__LINE__,__FILE__,\"Verilated model didn't converge\");\n");
     puts("}\n");
 #endif
     puts("}\n");
@@ -1577,7 +1576,8 @@ void EmitCImp::emitWrapEval(AstNodeModule* modp) {
     puts(        "_eval(vlSymsp);\n");
 #ifndef NEW_ORDERING
     puts(	 "__Vchange = _change_request(vlSymsp);\n");
-    puts(        "if (++__VclockLoop > 100) vl_fatal(__FILE__,__LINE__,__FILE__,\"Verilated model didn't DC converge\");\n");
+    puts(        "if (++__VclockLoop > "+cvtToStr(v3Global.opt.convergeLimit())
+		 +") vl_fatal(__FILE__,__LINE__,__FILE__,\"Verilated model didn't DC converge\");\n");
     puts(    "}\n");
 #endif
     puts("}\n");

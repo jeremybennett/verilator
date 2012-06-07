@@ -4,8 +4,6 @@
 //
 // Code available from: http://www.veripool.org/verilator
 //
-// AUTHORS: Wilson Snyder with Paul Wasson, Duane Gabli
-//
 //*************************************************************************
 //
 // Copyright 2003-2012 by Wilson Snyder.  This program is free software; you can
@@ -63,9 +61,10 @@ public:
 	m_needHInlines = false;
 	m_needHeavy = false;
 	m_dpi = false;
-	m_rootp = makeNetlist();
+	m_rootp = NULL;  // created by makeInitNetlist() so static constructors run first
     }
     AstNetlist* makeNetlist();
+    void boot() { UASSERT(!m_rootp,"call once"); m_rootp = makeNetlist(); }
     void clear();
     // ACCESSORS (general)
     AstNetlist* rootp() const { return m_rootp; }

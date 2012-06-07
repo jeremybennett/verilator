@@ -4,8 +4,6 @@
 //
 // Code available from: http://www.veripool.org/verilator
 //
-// AUTHORS: Wilson Snyder with Paul Wasson, Duane Gabli
-//
 //*************************************************************************
 //
 // Copyright 2003-2012 by Wilson Snyder.  This program is free software; you can
@@ -1079,6 +1077,7 @@ public:
 
     // METHODS - dump and error
     void	v3errorEnd(ostringstream& str) const;
+    string	warnMore() const;
     virtual void dump(ostream& str=cout);
     void	dumpGdb(); // For GDB only
     void	dumpGdbHeader() const;

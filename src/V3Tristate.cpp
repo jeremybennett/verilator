@@ -4,8 +4,6 @@
 //
 // Code available from: http://www.veripool.org/verilator
 //
-// AUTHORS: Lane Brooks with Wilson Snyder, Paul Wasson, Duane Gabli
-//
 //*************************************************************************
 //
 // Copyright 2003-2012 by Wilson Snyder.  This program is free software; you can
@@ -611,6 +609,8 @@ class TristateVisitor : public TristateBaseVisitor {
 		undrivenp = new AstAnd(nodep->fileline(), undrivenp,
 				       new AstConst(nodep->fileline(), pull));
 		orp = new AstOr(nodep->fileline(), orp, undrivenp);
+	    } else {
+		undrivenp->deleteTree(); undrivenp=NULL;
 	    }
 	    if (envarp) {
 		nodep->addStmtp(new AstAssignW(enp->fileline(),

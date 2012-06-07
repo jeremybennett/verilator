@@ -4,8 +4,6 @@
 //
 // Code available from: http://www.veripool.org/verilator
 //
-// AUTHORS: Wilson Snyder with Paul Wasson, Duane Gabli
-//
 //*************************************************************************
 //
 // Copyright 2003-2012 by Wilson Snyder.  This program is free software; you can
@@ -382,6 +380,13 @@ private:
 	}
 	nodep->replaceWith(new AstRefDType(nodep->fileline(), defp->name()));
 	nodep->deleteTree(); nodep=NULL;
+    }
+
+    virtual void visit(AstTypedefFwd* nodep, AstNUser*) {
+	// We only needed the forward declaration in order to parse correctly.
+	// We won't even check it was ever really defined, as it might have been in a header
+	// file referring to a module we never needed
+	nodep->unlinkFrBack()->deleteTree();
     }
 
     virtual void visit(AstNode* nodep, AstNUser*) {

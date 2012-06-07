@@ -4,8 +4,6 @@
 //
 // Code available from: http://www.veripool.org/verilator
 //
-// AUTHORS: Wilson Snyder with Paul Wasson, Duane Gabli
-//
 //*************************************************************************
 //
 // Copyright 2003-2012 by Wilson Snyder.  This program is free software; you can
@@ -977,7 +975,7 @@ private:
 	    AstNode* errorp = simvis.whyNotNodep(); if (!errorp) errorp = nodep;
 	    nodep->v3error("Expecting expression to be constant, but can't determine constant for "
 			   <<nodep->prettyTypeName()<<endl
-			   <<V3Error::msgPrefix(V3ErrorCode::EC_ERROR,false)<<errorp->fileline()<<"... Location of non-constant "
+			   <<errorp->warnMore()<<"... Location of non-constant "
 			   <<errorp->prettyTypeName()<<": "<<simvis.whyNotMessage());
 	    replaceZero(nodep); nodep=NULL;
 	} else {
@@ -1206,7 +1204,7 @@ private:
 	AstNode* bilhsp = fromp->lhsp()->unlinkFrBack();
 	//
 	fromp->lhsp(new AstSel(nodep->fileline(),
-			       bilhsp, lsbp->cloneTree(true), widthp->cloneTree(true)));
+			       bilhsp, lsbp, widthp));
 	fromp->dtypeFrom(nodep);
 	nodep->replaceWith(fromp); nodep->deleteTree(); nodep=NULL;
     }

@@ -4,8 +4,6 @@
 //
 // Code available from: http://www.veripool.org/verilator
 //
-// AUTHORS: Wilson Snyder with Paul Wasson, Duane Gabli
-//
 //*************************************************************************
 //
 // Copyright 2004-2012 by Wilson Snyder.  This program is free software; you can
@@ -276,8 +274,9 @@ private:
     virtual void visit(AstVarRef* nodep, AstNUser*) {
 	// Any variable
 	UndrivenVarEntry* entryp = getEntryp (nodep->varp());
+	bool fdrv = nodep->lvalue() && nodep->varp()->attrFileDescr();  // FD's are also being read from
 	if (m_markBoth || nodep->lvalue()) entryp->drivenWhole();
-	if (m_markBoth || !nodep->lvalue()) entryp->usedWhole();
+	if (m_markBoth || !nodep->lvalue() || fdrv) entryp->usedWhole();
     }
 
     // Don't know what black boxed calls do, assume in+out

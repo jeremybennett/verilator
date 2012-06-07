@@ -13,7 +13,6 @@ compile (
 	 fails=>$Self->{vlt},
 	 expect=>
 '%Error: t/t_udp.v:\d+: Unsupported: Verilog 1995 UDP Tables.  Use --bbox-unsup to ignore tables.
-%Error: t/t_udp.v:\d+: Unsupported: Verilog 1995 UDP Tables.  Use --bbox-unsup to ignore tables.
 %Error: Exiting due to '
 	 );
 

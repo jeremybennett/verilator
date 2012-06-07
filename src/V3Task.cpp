@@ -4,8 +4,6 @@
 //
 // Code available from: http://www.veripool.org/verilator
 //
-// AUTHORS: Wilson Snyder with Paul Wasson, Duane Gabli
-//
 //*************************************************************************
 //
 // Copyright 2003-2012 by Wilson Snyder.  This program is free software; you can
@@ -144,8 +142,8 @@ public:
     }
     void checkPurity(AstNodeFTask* nodep, TaskBaseVertex* vxp) {
 	if (!vxp->pure()) {
-	    nodep->v3warn(IMPURE,"Unsupported: External variable referenced by non-inlined function/task: "<<nodep->prettyName());
-	    vxp->impureNode()->v3warn(IMPURE,"... Location of the external reference: "<<vxp->impureNode()->prettyName());
+	    nodep->v3warn(IMPURE,"Unsupported: External variable referenced by non-inlined function/task: "<<nodep->prettyName()<<endl
+			  <<vxp->impureNode()->warnMore()<<"... Location of the external reference: "<<vxp->impureNode()->prettyName());
 	}
 	// And, we need to check all tasks this task calls
 	for (V3GraphEdge* edgep = vxp->outBeginp(); edgep; edgep=edgep->outNextp()) {
@@ -914,9 +912,9 @@ private:
 		m_dpiNames.insert(make_pair(nodep->cname(), make_pair(dpip, dpiproto)));
 	    }
 	    else if (iter->second.second != dpiproto) {
-		nodep->v3error("Duplicate declaration of DPI function with different formal arguments: "<<nodep->prettyName());
-		nodep->v3error("... New prototype:      "<<dpiproto);
-		iter->second.first->v3error("... Original prototype: "<<iter->second.second);
+		nodep->v3error("Duplicate declaration of DPI function with different formal arguments: "<<nodep->prettyName()<<endl
+			       <<nodep->warnMore()<<"... New prototype:      "<<dpiproto<<endl
+			       <<iter->second.first->warnMore()<<"... Original prototype: "<<iter->second.second);
 	    }
 	}
 
@@ -932,8 +930,8 @@ private:
 		    if (dpip) {
 			dpip->addArgsp(portp->cloneTree(false));
 			if (!portp->basicp() || portp->basicp()->keyword().isDpiUnsupported()) {
-			    portp->v3error("Unsupported: DPI argument of type "<<portp->basicp()->prettyTypeName());
-			    portp->v3error("... For best portability, use bit, byte, int, or longint");
+			    portp->v3error("Unsupported: DPI argument of type "<<portp->basicp()->prettyTypeName()<<endl
+					   <<portp->warnMore()<<"... For best portability, use bit, byte, int, or longint");
 			}
 		    }
 		} else {

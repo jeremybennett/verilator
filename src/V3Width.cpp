@@ -4,8 +4,6 @@
 //
 // Code available from: http://www.veripool.org/verilator
 //
-// AUTHORS: Wilson Snyder with Paul Wasson, Duane Gabli
-//
 //*************************************************************************
 //
 // Copyright 2003-2012 by Wilson Snyder.  This program is free software; you can
@@ -875,8 +873,9 @@ private:
 	    num.opAssign(itemp->valuep()->castConst()->num());
 	    // Look for duplicates
 	    if (inits.find(num) != inits.end()) {  // IEEE says illegal
-		itemp->v3error("Overlapping enumeration value: "<<itemp->prettyName());
-		inits.find(num)->second->v3error("... Location of original declaration");
+		itemp->v3error("Overlapping enumeration value: "<<itemp->prettyName()<<endl
+			       <<inits.find(num)->second->warnMore()
+			       <<"... Location of original declaration");
 	    } else {
 		inits.insert(make_pair(num,itemp));
 	    }
@@ -1302,6 +1301,7 @@ private:
 			    string format;
 			    if (pinp->castConst()) format = pinp->castConst()->num().toString();
 			    else pinp->v3error("Format to $display-like function must have constant format string");
+			    pushDeletep(pinp); pinp=NULL;
 			    AstSFormatF* newp = new AstSFormatF(nodep->fileline(), format, false, argsp);
 			    if (!newp->scopeNamep() && newp->formatScopeTracking()) {
 				newp->scopeNamep(new AstScopeName(newp->fileline()));
@@ -1750,7 +1750,7 @@ private:
 	    num.isSigned(expDTypep->isSigned());
 	    AstNode* newp = new AstConst(nodep->fileline(), num);
 	    constp->replaceWith(newp);
-	    pushDeletep(constp); constp=NULL;
+	    pushDeletep(constp); constp=NULL; nodep=NULL;
 	    nodep=newp;
 	} else if (expWidth<nodep->width()) {
 	    // Trunc - Extract
@@ -1788,6 +1788,7 @@ private:
 	    num.isSigned(expSigned);
 	    AstNode* newp = new AstConst(nodep->fileline(), num);
 	    constp->replaceWith(newp);
+	    constp->deleteTree(); constp=NULL; nodep=NULL;
 	    nodep=newp;
 	} else {
 	    AstNRelinker linker;

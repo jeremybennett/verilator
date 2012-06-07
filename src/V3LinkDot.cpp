@@ -4,8 +4,6 @@
 //
 // Code available from: http://www.veripool.org/verilator
 //
-// AUTHORS: Wilson Snyder with Paul Wasson, Duane Gabli
-//
 //*************************************************************************
 //
 // Copyright 2003-2012 by Wilson Snyder.  This program is free software; you can
@@ -85,7 +83,7 @@ public:
     }
     void errorScopes(AstNode* nodep) {
 	if (!this) {  // Silence if we messed it up and aren't debugging
-	    if (debug()) nodep->v3fatalSrc("Void pointer; perhaps used null vxp instead of okVxp?");
+	    if (debug() || v3Global.opt.debugCheck()) nodep->v3fatalSrc("Void pointer; perhaps used null vxp instead of okVxp?");
 	    return;
 	}
 	{
@@ -489,6 +487,12 @@ private:
 	//
 	nodep->flatsp()->iterateAndNext(*this);
     }
+    virtual void visit(AstNodeFTask* nodep, AstNUser*) {
+	if (!m_beginp) {	// For now, we don't support xrefs into functions inside begin blocks
+	    m_statep->insertSym(m_cellVxp, nodep->name(), nodep);
+	}
+	// No recursion, we don't want to pick up variables
+    }
     virtual void visit(AstVar* nodep, AstNUser*) {
 	if (!m_statep->forScopeCreation()
 	    && !m_beginp	// For now, we don't support xrefs into begin blocks
@@ -497,12 +501,6 @@ private:
 	} else {
 	    UINFO(9,"       Not allowing dot refs to: "<<nodep<<endl);
 	}
-    }
-    virtual void visit(AstNodeFTask* nodep, AstNUser*) {
-	if (!m_beginp) {	// For now, we don't support xrefs into functions inside begin blocks
-	    m_statep->insertSym(m_cellVxp, nodep->name(), nodep);
-	}
-	// No recursion, we don't want to pick up variables
     }
     virtual void visit(AstCFunc* nodep, AstNUser*) {
 	// Ignore all AstVars under functions
@@ -738,7 +736,8 @@ void V3LinkDot::linkDotGuts(AstNetlist* rootp, bool prearray, bool scoped) {
     LinkDotState state (prearray,scoped);
     LinkDotFindVisitor visitor(rootp,&state);
     if (scoped) {
-	// Process AstScope's.  This needs to be separate pass after whole hierarchy graph created.
+	// Well after the initial link when we're ready to operate on the flat design,
+	// process AstScope's.  This needs to be separate pass after whole hierarchy graph created.
 	LinkDotScopeVisitor visitors(rootp,&state);
     }
     state.dump();
