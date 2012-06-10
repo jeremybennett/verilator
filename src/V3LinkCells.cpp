@@ -4,8 +4,6 @@
 //
 // Code available from: http://www.veripool.org/verilator
 //
-// AUTHORS: Wilson Snyder with Paul Wasson, Duane Gabli
-//
 //*************************************************************************
 //
 // Copyright 2003-2012 by Wilson Snyder.  This program is free software; you can
@@ -294,8 +292,8 @@ private:
 	    AstNode* foundp = m_mods.findIdUpward(nodep->name());
 	    if (foundp && foundp != nodep) {
 		if (!(foundp->fileline()->warnIsOff(V3ErrorCode::MODDUP) || nodep->fileline()->warnIsOff(V3ErrorCode::MODDUP))) {
-		    nodep->v3warn(MODDUP,"Duplicate declaration of module: "<<nodep->prettyName());
-		    foundp->v3warn(MODDUP,"... Location of original declaration");
+		    nodep->v3warn(MODDUP,"Duplicate declaration of module: "<<nodep->prettyName()<<endl
+				  <<foundp->warnMore()<<"... Location of original declaration");
 		}
 		nodep->unlinkFrBack();
 		pushDeletep(nodep); nodep=NULL;

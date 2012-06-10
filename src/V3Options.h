@@ -4,8 +4,6 @@
 //
 // Code available from: http://www.veripool.org/verilator
 //
-// AUTHORS: Wilson Snyder with Paul Wasson, Duane Gabli
-//
 //*************************************************************************
 //
 // Copyright 2003-2012 by Wilson Snyder.  This program is free software; you can
@@ -127,6 +125,7 @@ class V3Options {
     bool	m_underlineZero;// main switch: --underline-zero; undocumented old Verilator 2
     bool	m_xmlOnly;	// main switch: --xml-netlist
 
+    int		m_convergeLimit;// main switch: --converge-limit
     int		m_dumpTree;	// main switch: --dump-tree
     int		m_errorLimit;	// main switch: --error-limit
     int		m_ifDepth;	// main switch: --if-depth
@@ -254,6 +253,7 @@ class V3Options {
     bool inhibitSim() const { return m_inhibitSim; }
     bool xmlOnly() const { return m_xmlOnly; }
 
+    int	   convergeLimit() const { return m_convergeLimit; }
     int    dumpTree() const { return m_dumpTree; }
     int	   errorLimit() const { return m_errorLimit; }
     int	   ifDepth() const { return m_ifDepth; }

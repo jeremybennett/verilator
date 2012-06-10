@@ -4,8 +4,6 @@
 //
 // Code available from: http://www.veripool.org/verilator
 //
-// AUTHORS: Wilson Snyder with Paul Wasson, Duane Gabli
-//
 //*************************************************************************
 //
 // Copyright 2003-2012 by Wilson Snyder.  This program is free software; you can
@@ -45,6 +43,7 @@ bool V3Error::s_errorSuppressed = false;
 bool V3Error::s_describedEachWarn[V3ErrorCode::_ENUM_MAX];
 bool V3Error::s_describedWarnings = false;
 bool V3Error::s_pretendError[V3ErrorCode::_ENUM_MAX];
+V3Error::MessagesSet V3Error::s_messages;
 
 struct v3errorIniter {
     v3errorIniter() {  V3Error::init(); }
@@ -265,6 +264,14 @@ void FileLine::v3errorEnd(ostringstream& str) {
     }
 }
 
+string FileLine::warnMore() const {
+    if (this && m_lineno) {
+	return V3Error::warnMore()+ascii()+": ";
+    } else {
+	return V3Error::warnMore();
+    }
+}
+
 #ifdef VL_LEAK_CHECKS
 typedef set<FileLine*> FileLineCheckSet;
 FileLineCheckSet fileLineLeakChecks;
@@ -301,7 +308,7 @@ void FileLine::deleteAllRemaining() {
 	// Eventually the list will be empty and terminate the loop.
     }
     fileLineLeakChecks.clear();
-    FileLineSingleton::clear();
+    singleton().clear();
 #endif
 }
 
@@ -370,7 +377,9 @@ bool V3Error::isError(V3ErrorCode code, bool supp) {
     else return false;
 }
 
-string V3Error::msgPrefix(V3ErrorCode code, bool supp) {
+string V3Error::msgPrefix() {
+    V3ErrorCode code=s_errorCode;
+    bool supp=s_errorSuppressed;
     if (supp) return "-arning-suppressed: ";
     else if (code==V3ErrorCode::EC_INFO) return "-Info: ";
     else if (code==V3ErrorCode::EC_FATAL) return "%Error: ";
@@ -395,18 +404,6 @@ void V3Error::vlAbort () {
 //======================================================================
 // Global Functions
 
-string V3Error::v3sform (const char* format, ...) {
-    static char msg[1000] = "";
-
-    va_list ap;
-    va_start(ap,format);
-    vsprintf(msg,format,ap);
-    va_end(ap);
-
-    string out = msg;
-    return out;
-}
-
 void V3Error::suppressThisWarning() {
     if (s_errorCode>=V3ErrorCode::EC_MIN) {
 	V3Stats::addStatSum(string("Warnings, Suppressed ")+s_errorCode.ascii(), 1);
@@ -414,63 +411,70 @@ void V3Error::suppressThisWarning() {
     }
 }
 
+string V3Error::warnMore() {
+    return msgPrefix();
+}
+
 void V3Error::v3errorEnd (ostringstream& sstr) {
 #if defined(__COVERITY__) || defined(__cppcheck__)
     if (s_errorCode==V3ErrorCode::EC_FATAL) __coverity_panic__(x);
 #endif
-    if (!s_errorSuppressed
+    // Skip suppressed messages
+    if (s_errorSuppressed
 	// On debug, show only non default-off warning to prevent pages of warnings
-	|| (debug() && !s_errorCode.defaultsOff())) {
-	cerr<<msgPrefix()<<sstr.str();
-	if (sstr.str()[sstr.str().length()-1] != '\n') {
-	    cerr<<endl;
-	}
-	if (!s_errorSuppressed && s_errorCode!=V3ErrorCode::EC_INFO) {
-	    if (!s_describedEachWarn[s_errorCode]
-		&& !s_pretendError[s_errorCode]) {
-		s_describedEachWarn[s_errorCode] = true;
-		if (s_errorCode>=V3ErrorCode::EC_FIRST_WARN && !s_describedWarnings) {
-		    cerr<<msgPrefix()<<"Use \"/* verilator lint_off "<<s_errorCode.ascii()
-			<<" */\" and lint_on around source to disable this message."<<endl;
-		    s_describedWarnings = true;
-		}
-		if (s_errorCode.dangerous()) {
-		    cerr<<msgPrefix()<<"*** See the manual before disabling this,"<<endl;
-		    cerr<<msgPrefix()<<"else you may end up with different sim results."<<endl;
-		}
+	&& (!debug() || s_errorCode.defaultsOff())) return;
+    string msg = msgPrefix()+sstr.str();
+    if (msg[msg.length()-1] != '\n') msg += '\n';
+    // Suppress duplicates
+    if (s_messages.find(msg) != s_messages.end()) return;
+    s_messages.insert(msg);
+    // Output
+    cerr<<msg;
+    if (!s_errorSuppressed && s_errorCode!=V3ErrorCode::EC_INFO) {
+	if (!s_describedEachWarn[s_errorCode]
+	    && !s_pretendError[s_errorCode]) {
+	    s_describedEachWarn[s_errorCode] = true;
+	    if (s_errorCode>=V3ErrorCode::EC_FIRST_WARN && !s_describedWarnings) {
+		cerr<<msgPrefix()<<"Use \"/* verilator lint_off "<<s_errorCode.ascii()
+		    <<" */\" and lint_on around source to disable this message."<<endl;
+		s_describedWarnings = true;
 	    }
-	    // If first warning is not the user's fault (internal/unsupported) then give the website
-	    // Not later warnings, as a internal may be caused by an earlier problem
-	    if (s_tellManual == 0) {
-		if (s_errorCode.mentionManual()
-		    || sstr.str().find("Unsupported") != string::npos) {
-		    s_tellManual = 1;
-		} else {
+	    if (s_errorCode.dangerous()) {
+		cerr<<msgPrefix()<<"*** See the manual before disabling this,"<<endl;
+		cerr<<msgPrefix()<<"else you may end up with different sim results."<<endl;
+	    }
+	}
+	// If first warning is not the user's fault (internal/unsupported) then give the website
+	// Not later warnings, as a internal may be caused by an earlier problem
+	if (s_tellManual == 0) {
+	    if (s_errorCode.mentionManual()
+		|| sstr.str().find("Unsupported") != string::npos) {
+		s_tellManual = 1;
+	    } else {
+		s_tellManual = 2;
+	    }
+	}
+	if (isError(s_errorCode, s_errorSuppressed)) incErrors();
+	else incWarnings();
+	if (s_errorCode==V3ErrorCode::EC_FATAL
+	    || s_errorCode==V3ErrorCode::EC_FATALSRC) {
+	    static bool inFatal = false;
+	    if (!inFatal) {
+		inFatal = true;
+		if (s_tellManual==1) {
+		    cerr<<msgPrefix()<<"See the manual and http://www.veripool.org/verilator for more assistance."<<endl;
 		    s_tellManual = 2;
 		}
-	    }
-	    if (isError(s_errorCode, s_errorSuppressed)) incErrors();
-	    else incWarnings();
-	    if (s_errorCode==V3ErrorCode::EC_FATAL
-		|| s_errorCode==V3ErrorCode::EC_FATALSRC) {
-		static bool inFatal = false;
-		if (!inFatal) {
-		    inFatal = true;
-		    if (s_tellManual==1) {
-			cerr<<msgPrefix()<<"See the manual and http://www.veripool.org/verilator for more assistance."<<endl;
-			s_tellManual = 2;
-		    }
 #ifndef _V3ERROR_NO_GLOBAL_
-		    if (debug()) {
-			v3Global.rootp()->dumpTreeFile(v3Global.debugFilename("final.tree",99));
-			V3Stats::statsFinalAll(v3Global.rootp());
-			V3Stats::statsReport();
-		    }
-#endif
+		if (debug()) {
+		    v3Global.rootp()->dumpTreeFile(v3Global.debugFilename("final.tree",99));
+		    V3Stats::statsFinalAll(v3Global.rootp());
+		    V3Stats::statsReport();
 		}
-
-		vlAbort();
+#endif
 	    }
+
+	    vlAbort();
 	}
     }
 }

@@ -4,8 +4,6 @@
 //
 // Code available from: http://www.veripool.org/verilator
 //
-// AUTHORS: Wilson Snyder with Paul Wasson, Duane Gabli
-//
 //*************************************************************************
 //
 // Copyright 2003-2012 by Wilson Snyder.  This program is free software; you can
@@ -617,6 +615,9 @@ int main(int argc, char** argv, char** env) {
     time_t randseed;
     time(&randseed);
     srand( (int) randseed);
+
+    // Post-constructor initialization of netlists
+    v3Global.boot();
 
     // Preprocessor
     // Before command parsing so we can handle -Ds on command line.
