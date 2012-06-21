@@ -91,7 +91,7 @@ private:
     //  Entire netlist:
     //   AstNodeModule::user1p()	// V3GraphVertex*    Vertex describing this module
     //  Allocated across all readFiles in V3Global::readFiles:
-    //   AstNode::user4p()	// V3SymTable*    Package and typedef symbol names
+    //   AstNode::user4p()	// VSymEnt*    Package and typedef symbol names
     AstUser1InUse	m_inuser1;
 
     // STATE
@@ -99,10 +99,11 @@ private:
 
     // Below state needs to be preserved between each module call.
     AstNodeModule*	m_modp;		// Current module
-    V3SymTable  	m_mods;		// Symbol table of all module names
+    VSymGraph	  	m_mods;		// Symbol table of all module names
     LinkCellsGraph	m_graph;	// Linked graph of all cell interconnects
     LibraryVertex*	m_libVertexp;	// Vertex at root of all libraries
     V3GraphVertex*	m_topVertexp;	// Vertex of top module
+    set<string>		m_declfnWarned;	// Files we issued DECLFILENAME on
 
     static int debug() {
 	static int level = -1;
@@ -155,6 +156,15 @@ private:
 	// Module: Pick up modnames, so we can resolve cells later
 	m_modp = nodep;
 	UINFO(2,"Link Module: "<<nodep<<endl);
+	if (nodep->fileline()->filebasenameNoExt() != nodep->prettyName()
+	    && !v3Global.opt.isLibraryFile(nodep->fileline()->filename())) {
+	    // We only complain once per file, otherwise library-like files have a huge mess of warnings
+	    if (m_declfnWarned.find(nodep->fileline()->filename()) == m_declfnWarned.end()) {
+		m_declfnWarned.insert(nodep->fileline()->filename());
+		nodep->v3warn(DECLFILENAME, "Filename '"<<nodep->fileline()->filebasenameNoExt()
+			      <<"' does not match "<<nodep->typeName()<<" name: "<<nodep->prettyName());
+	    }
+	}
 	bool topMatch = (v3Global.opt.topModule()==nodep->name());
 	if (topMatch) {
 	    m_topVertexp = vertex(nodep);
@@ -185,9 +195,9 @@ private:
 	// Cell: Resolve its filename.  If necessary, parse it.
 	if (!nodep->modp()) {
 	    UINFO(4,"Link Cell: "<<nodep<<endl);
-	    // Use findIdUpward instead of findIdFlat; it doesn't matter for now
+	    // Use findIdFallback instead of findIdFlat; it doesn't matter for now
 	    // but we might support modules-under-modules someday.
-	    AstNodeModule* modp = m_mods.findIdUpward(nodep->modName())->castNodeModule();
+	    AstNodeModule* modp = m_mods.rootp()->findIdFallback(nodep->modName())->nodep()->castNodeModule();
 	    if (!modp) {
 		// Read-subfile
 		// If file not found, make AstNotFoundModule, rather than error out.
@@ -198,7 +208,7 @@ private:
 		// We've read new modules, grab new pointers to their names
 		readModNames();
 		// Check again
-		modp = m_mods.findIdUpward(nodep->modName())->castNodeModule();
+		modp = m_mods.rootp()->findIdFallback(nodep->modName())->nodep()->castNodeModule();
 		if (!modp) {
 		    nodep->v3error("Can't resolve module reference: "<<nodep->modName());
 		}
@@ -241,20 +251,20 @@ private:
 	}
 	if (nodep->modp()) {
 	    // Note what pins exist
-	    V3SymTable  ports;	// Symbol table of all connected port names
+	    set<string> ports;	// Symbol table of all connected port names
 	    for (AstPin* pinp = nodep->pinsp(); pinp; pinp=pinp->nextp()->castPin()) {
 		if (pinp->name()=="") pinp->v3error("Connect by position is illegal in .* connected cells");
 		if (!pinp->exprp()) pinp->v3warn(PINNOCONNECT,"Cell pin is not connected: "<<pinp->prettyName());
-		if (!ports.findIdFlat(pinp->name())) {
-		    ports.insert(pinp->name(), pinp);
+		if (ports.find(pinp->name()) == ports.end()) {
+		    ports.insert(pinp->name());
 		}
 	    }
 	    // We search ports, rather than in/out declarations as they aren't resolved yet,
 	    // and it's easier to do it now than in V3Link when we'd need to repeat steps.
 	    for (AstNode* portnodep = nodep->modp()->stmtsp(); portnodep; portnodep=portnodep->nextp()) {
 		if (AstPort* portp = portnodep->castPort()) {
-		    if (!ports.findIdFlat(portp->name())
-			&& !ports.findIdFlat("__pinNumber"+cvtToStr(portp->pinNum()))) {
+		    if (ports.find(portp->name()) == ports.end()
+			&& ports.find("__pinNumber"+cvtToStr(portp->pinNum())) == ports.end()) {
 			if (pinStar) {
 			    UINFO(9,"    need .* PORT  "<<portp<<endl);
 			    // Create any not already connected
@@ -289,7 +299,7 @@ private:
 	// Look at all modules, and store pointers to all module names
 	for (AstNodeModule* nextp,* nodep = v3Global.rootp()->modulesp(); nodep; nodep=nextp) {
 	    nextp = nodep->nextp()->castNodeModule();
-	    AstNode* foundp = m_mods.findIdUpward(nodep->name());
+	    AstNode* foundp = m_mods.rootp()->findIdFallback(nodep->name())->nodep();
 	    if (foundp && foundp != nodep) {
 		if (!(foundp->fileline()->warnIsOff(V3ErrorCode::MODDUP) || nodep->fileline()->warnIsOff(V3ErrorCode::MODDUP))) {
 		    nodep->v3warn(MODDUP,"Duplicate declaration of module: "<<nodep->prettyName()<<endl
@@ -298,7 +308,7 @@ private:
 		nodep->unlinkFrBack();
 		pushDeletep(nodep); nodep=NULL;
 	    } else if (!foundp) {
-		m_mods.insert(nodep->name(), nodep);
+		m_mods.rootp()->insert(nodep->name(), new VSymEnt(&m_mods, nodep));
 	    }
 	}
 	//if (debug()>=9) m_mods.dump(cout, "-syms: ");
@@ -306,7 +316,8 @@ private:
 
 public:
     // CONSTUCTORS
-    LinkCellsVisitor(AstNetlist* rootp, V3InFilter* filterp) {
+    LinkCellsVisitor(AstNetlist* rootp, V3InFilter* filterp)
+	: m_mods(rootp) {
 	m_filterp = filterp;
 	m_modp = NULL;
 	m_libVertexp = NULL;
