@@ -1011,6 +1011,7 @@ sub _make_main {
 	}
 	$fh->print("    topp->trace (tfp, 99);\n");
 	$fh->print("    tfp->open (\"$self->{obj_dir}/simx.vcd\");\n");
+	$fh->print("	if (tfp) tfp->dump (main_time);\n");
 	$fh->print("#endif\n");
     }
 
