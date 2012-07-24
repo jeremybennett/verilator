@@ -7,6 +7,8 @@
 // This file ONLY is placed into the Public Domain, for any use,
 // without warranty, 2012 by Jeremy Bennett.
 
+ `timescale 1ns/1ns
+
 module t (/*AUTOARG*/
    // Inputs
    clk
@@ -36,12 +38,27 @@ module t (/*AUTOARG*/
 
    // Derive our two derived signals in separate processes, so they are in a
    // race.
+
+   // There are two potential races here, depending on whether blocking or
+   // no-blocking assignments are used to assign sub_clk and sub_comb in the
+   // first two always blocks.
+
+   // 1. There is a race between sub_clk being written in the first always
+   //    block and being read in the second, if it is assigned to using a
+   //    blocking assignment.
+
+   // 2. There is a race between sub_comb being updated in the second always
+   //    block and sub_comb being read (i.e. the posedge of sub_clk event) in
+   //    the third always block, if sub_comb is set using a non-blocking
+   //    assignment.
    always @(posedge clk) begin
-      sub_clk <= ~sub_clk;
+      sub_clk = ~sub_clk;
    end
 
    always @(posedge clk) begin
-      sub_comb <= sub_comb + 1;
+      if (sub_clk) begin
+	sub_comb <= sub_comb + 1;
+      end
    end
 
    always @(posedge sub_clk) begin
