@@ -946,15 +946,19 @@ void AstNode::dumpGdb() {  // For GDB only
     dumpGdbHeader();
     cout<<"  "; dump(cout); cout<<endl;
 }
+void AstNode::dumpGdbHeader() const {  // For GDB only
+    if (!this) { cout<<"This=NULL"<<endl; return; }
+    dumpPtrs(cout);
+    cout<<"  Fileline = "<<fileline()<<endl;
+}
 void AstNode::dumpTreeGdb() {  // For GDB only
     if (!this) { cout<<"This=NULL"<<endl; return; }
     dumpGdbHeader();
     dumpTree(cout);
 }
-void AstNode::dumpGdbHeader() const {  // For GDB only
-    if (!this) { cout<<"This=NULL"<<endl; return; }
-    dumpPtrs(cout);
-    cout<<"  Fileline = "<<fileline()<<endl;
+void AstNode::dumpTreeFileGdb(const char* filenamep) {  // For GDB only
+    string filename = filenamep ? filenamep : v3Global.debugFilename("debug.tree",98);
+    v3Global.rootp()->dumpTreeFile(filename);
 }
 
 void AstNode::dumpPtrs(ostream& os) const {
@@ -1078,17 +1082,17 @@ void AstNode::dtypeChgWidthSigned(int width, int widthMin, bool issigned) {
     }
 }
 
-AstNodeDType* AstNode::findBasicDType(AstBasicDTypeKwd kwd) {
+AstNodeDType* AstNode::findBasicDType(AstBasicDTypeKwd kwd) const {
     // For 'simple' types we use the global directory.  These are all unsized.
     // More advanced types land under the module/task/etc
     return v3Global.rootp()->typeTablep()
 	->findBasicDType(fileline(), kwd);
 }
-AstNodeDType* AstNode::findBitDType(int width, int widthMin, AstNumeric numeric) {
+AstNodeDType* AstNode::findBitDType(int width, int widthMin, AstNumeric numeric) const {
     return v3Global.rootp()->typeTablep()
 	->findLogicBitDType(fileline(), AstBasicDTypeKwd::BIT, width, widthMin, numeric);
 }
-AstNodeDType* AstNode::findLogicDType(int width, int widthMin, AstNumeric numeric) {
+AstNodeDType* AstNode::findLogicDType(int width, int widthMin, AstNumeric numeric) const {
     return v3Global.rootp()->typeTablep()
 	->findLogicBitDType(fileline(), AstBasicDTypeKwd::LOGIC, width, widthMin, numeric);
 }

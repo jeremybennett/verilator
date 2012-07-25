@@ -500,10 +500,11 @@ class AstParseRefExp {
 public:
     enum en {
 	PX_NONE,	// Used in V3LinkParse only
-	PX_VAR_MEM,
-	PX_VAR_ANY,
-	PX_TASK,
-	PX_FUNC
+	PX_TEXT,	// Unknown ID component
+	PX_PREDOT,	// Module name or misc component above var/task/func/member
+	PX_VAR_MEM,	// Variable that must be a memory
+	PX_VAR_ANY,	// Variable/structure member
+	PX_FTASK	// Task/Function (AstParse::ftaskrefp() will be set)
     };
     enum en m_e;
     inline AstParseRefExp() : m_e(PX_NONE) {}
@@ -512,7 +513,7 @@ public:
     operator en () const { return m_e; }
     const char* ascii() const {
 	static const char* names[] = {
-	    "","VAR_MEM","VAR_ANY","TASK","FUNC"};
+	    "","TEXT","PREDOT","VAR_MEM","VAR_ANY","FTASK"};
 	return names[m_e]; }
   };
   inline bool operator== (AstParseRefExp lhs, AstParseRefExp rhs) { return (lhs.m_e == rhs.m_e); }
@@ -1070,9 +1071,9 @@ public:
     AstNodeDType* findSigned32DType()	{ return findBasicDType(AstBasicDTypeKwd::INTEGER); }
     AstNodeDType* findUInt32DType()	{ return findBasicDType(AstBasicDTypeKwd::UINT32); }  // Twostate
     AstNodeDType* findUInt64DType()	{ return findBasicDType(AstBasicDTypeKwd::UINT64); }  // Twostate
-    AstNodeDType* findBitDType(int width, int widthMin, AstNumeric numeric);
-    AstNodeDType* findLogicDType(int width, int widthMin, AstNumeric numeric);
-    AstNodeDType* findBasicDType(AstBasicDTypeKwd kwd);
+    AstNodeDType* findBitDType(int width, int widthMin, AstNumeric numeric) const;
+    AstNodeDType* findLogicDType(int width, int widthMin, AstNumeric numeric) const;
+    AstNodeDType* findBasicDType(AstBasicDTypeKwd kwd) const;
     AstBasicDType* findInsertSameDType(AstBasicDType* nodep);
 
     // METHODS - dump and error
@@ -1109,6 +1110,7 @@ public:
     void	dumpTreeGdb(); // For GDB only
     void	dumpTreeAndNext(ostream& str=cout, const string& indent="    ", int maxDepth=0);
     void	dumpTreeFile(const string& filename, bool append=false);
+    static void	dumpTreeFileGdb(const char* filenamep=NULL);
 
     // METHODS - queries
     virtual bool isPure() const { return true; }	// Else a $display, etc, that must be ordered with other displays
@@ -1646,13 +1648,14 @@ private:
     bool	m_modPublic:1;	// Module has public references
     bool	m_modTrace:1;	// Tracing this module
     bool	m_inLibrary:1;	// From a library, no error if not used, never top level
+    bool	m_dead:1;	// LinkDot believes is dead; will remove in Dead visitors
     int		m_level;	// 1=top module, 2=cell off top module, ...
     int		m_varNum;	// Incrementing variable number
 public:
     AstNodeModule(FileLine* fl, const string& name)
 	: AstNode (fl)
 	,m_name(name), m_origName(name)
-	,m_modPublic(false), m_modTrace(false), m_inLibrary(false)
+	,m_modPublic(false), m_modTrace(false), m_inLibrary(false), m_dead(false)
 	,m_level(0), m_varNum(0) { }
     ASTNODE_BASE_FUNCS(NodeModule)
     virtual void dump(ostream& str);
@@ -1677,6 +1680,8 @@ public:
     bool modPublic() const 	{ return m_modPublic; }
     void modTrace(bool flag) 	{ m_modTrace = flag; }
     bool modTrace() const 	{ return m_modTrace; }
+    void dead(bool flag) 	{ m_dead = flag; }
+    bool dead() const	 	{ return m_dead; }
 };
 
 //######################################################################

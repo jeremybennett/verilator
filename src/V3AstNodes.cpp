@@ -702,6 +702,7 @@ void AstNodeModule::dump(ostream& str) {
     str<<"  L"<<level();
     if (modPublic()) str<<" [P]";
     if (inLibrary()) str<<" [LIB]";
+    if (dead()) str<<" [DEAD]";
 }
 void AstPackageImport::dump(ostream& str) {
     this->AstNode::dump(str);
@@ -754,7 +755,7 @@ void AstVarScope::dump(ostream& str) {
 }
 void AstVarXRef::dump(ostream& str) {
     this->AstNode::dump(str);
-    if (packagep()) { str<<" pkg=0x"<<(void*)packagep(); }
+    if (packagep()) { str<<" pkg="<<(void*)packagep(); }
     if (lvalue()) str<<" [LV] => ";
     else          str<<" [RV] <- ";
     str<<dotted()<<". - ";
@@ -765,7 +766,7 @@ void AstVarXRef::dump(ostream& str) {
 }
 void AstVarRef::dump(ostream& str) {
     this->AstNode::dump(str);
-    if (packagep()) { str<<" pkg=0x"<<(void*)packagep(); }
+    if (packagep()) { str<<" pkg="<<(void*)packagep(); }
     if (lvalue()) str<<" [LV] => ";
     else          str<<" [RV] <- ";
     if (varScopep()) { varScopep()->dump(str); }
@@ -805,6 +806,11 @@ void AstSenItem::dump(ostream& str) {
 void AstParseRef::dump(ostream& str) {
     this->AstNode::dump(str);
     str<<" ["<<expect().ascii()<<"]";
+    if (start()) str<<" [START]";
+}
+void AstDot::dump(ostream& str) {
+    this->AstNode::dump(str);
+    if (start()) str<<" [START]";
 }
 void AstActive::dump(ostream& str) {
     this->AstNode::dump(str);
@@ -814,7 +820,7 @@ void AstActive::dump(ostream& str) {
 }
 void AstNodeFTaskRef::dump(ostream& str) {
     this->AstNode::dump(str);
-    if (packagep()) { str<<" pkg=0x"<<(void*)packagep(); }
+    if (packagep()) { str<<" pkg="<<(void*)packagep(); }
     str<<" -> ";
     if (dotted()!="") { str<<dotted()<<". - "; }
     if (taskp()) { taskp()->dump(str); }
@@ -831,8 +837,8 @@ void AstNodeFTask::dump(ostream& str) {
 void AstBegin::dump(ostream& str) {
     this->AstNode::dump(str);
     if (unnamed()) str<<" [UNNAMED]";
-    if (hidden()) str<<" [HIDDEN]";
     if (generate()) str<<" [GEN]";
+    if (genforp()) str<<" [GENFOR]";
 }
 void AstCoverDecl::dump(ostream& str) {
     this->AstNode::dump(str);
