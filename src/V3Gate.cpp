@@ -310,7 +310,7 @@ private:
     virtual void visit(AstNetlist* nodep, AstNUser*) {
 	nodep->iterateChildren(*this);
 	//if (debug()>6) m_graph.dump();
-	if (debug()>6) m_graph.dumpDotFilePrefixed("gate_pre");
+	if (v3Global.opt.dumpTree()>6) m_graph.dumpDotFilePrefixed("gate_pre");
 	m_graph.removeRedundantEdgesSum(&V3GraphEdge::followAlwaysTrue);
 	m_graph.dumpDotFilePrefixed("gate_simp");
 	// Find gate interconnect and optimize
