@@ -305,6 +305,7 @@ private:
     void consumedMarkRecurse(GateEitherVertex* vertexp);
     void consumedMove();
     void replaceAssigns();
+    void splitSignals();
 
     // VISITORS
     virtual void visit(AstNetlist* nodep, AstNUser*) {
@@ -323,6 +324,8 @@ private:
 	warnSignals();
 	consumedMark();
 	m_graph.dumpDotFilePrefixed("gate_opt");
+	// Split per-bit sections into multiple vertices.
+	splitSignals();
 	// Rewrite assignments
 	consumedMove();
 	replaceAssigns();
@@ -620,6 +623,40 @@ void GateVisitor::replaceAssigns() {
     }
 }
 
+//! Rewrite the graph, splitting signals that are selected.
+
+//! Many designs aggregate signals, and we cannot see the dependencies in the
+//! netlist broken down into these sub-signals.
+
+//! This is preliminary work towards dealing with UNOPTFLAT automatically.
+void GateVisitor::splitSignals() {
+    // Loop through all the vertices
+    for (V3GraphVertex* itp = m_graph.verticesBeginp();
+	 itp;
+	 itp=itp->verticesNextp()) {
+	if (GateVarVertex *vvertexp = dynamic_cast<GateVarVertex *>(itp)) {
+	    UINFO(0,"Vertex: " << vvertexp->scopep() << endl);
+	    // Sources are l-values that set us, sinks are r-values that use
+	    // us. First the l-values:
+	    for (V3GraphEdge *edgep = vvertexp->inBeginp();
+		 edgep;
+		 edgep = edgep->inNextp()) {
+		GateLogicVertex *lvertexp =
+		    dynamic_cast<GateLogicVertex *>(edgep->fromp());
+		UINFO(0,"  Edge from " << lvertexp->nodep() << endl);
+	    }
+	    // Sources are l-values that set us, sinks are r-values that use
+	    // us. First the l-values:
+	    for (V3GraphEdge *edgep = vvertexp->outBeginp();
+		 edgep;
+		 edgep = edgep->outNextp()) {
+		GateLogicVertex *lvertexp =
+		    dynamic_cast<GateLogicVertex *>(edgep->top());
+		UINFO(0,"  Edge to " << lvertexp->nodep() << endl);
+	    }
+	}
+    }
+}
 //----------------------------------------------------------------------
 
 void GateVisitor::consumedMark() {
