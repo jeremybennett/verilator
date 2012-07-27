@@ -1,30 +1,17 @@
 // DESCRIPTION: Verilator: Verilog Test module
 //
-// Use this file as a template for submitting bugs, etc.
-// This module takes a single clock input, and should either
-//	$write("*-* All Finished *-*\n");
-//	$finish;
-// on success, or $stop.
-//
-// The code as shown applies a random vector to the Test
-// module, then calculates a CRC on the Test module's outputs.
-//
-// **If you do not wish for your code to be released to the public
-// please note it here, otherwise:**
+// A test of the ability to find netlist subsets based on individual bits.
 //
 // This file ONLY is placed into the Public Domain, for any use,
-// without warranty, 2012 by Wilson Snyder.
+// without warranty, 2012 by Jeremy Bennett.
 
-module t (/*AUTOARG*/
-   // Inputs
-   clk
-   );
-   input clk;
+module t (input clk);
 
-   integer 	cyc=0;
-   reg [63:0] 	crc;
-   reg [63:0] 	sum;
+   reg [1:0]
+   wire [1:0] 	to_test;
+   wire [1:0] 	from_test;
 
+   // The test instantiates
    // Take CRC data and apply to testblock inputs
    wire [31:0]  in = crc[31:0];
 
@@ -74,23 +61,14 @@ module t (/*AUTOARG*/
 
 endmodule
 
-module Test (/*AUTOARG*/
-   // Outputs
-   out,
-   // Inputs
-   clk, in
-   );
 
-   // Replace this module with the device under test.
-   //
-   // Change the code in the t module to apply values to the inputs and
-   // merge the output values into the result vector.
-
-   input clk;
-   input [31:0] in;
-   output reg [31:0] out;
+module Test (
+  input        clk,
+  input [1:0]  invec,
+  output [1:0] outvec);
 
    always @(posedge clk) begin
-      out <= in;
+      out [0] <= in [1];
+      out [1] <= in [0];
    end
 endmodule
