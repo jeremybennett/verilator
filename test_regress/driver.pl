@@ -1011,7 +1011,9 @@ sub _make_main {
 	}
 	$fh->print("    topp->trace (tfp, 99);\n");
 	$fh->print("    tfp->open (\"$self->{obj_dir}/simx.vcd\");\n");
-	$fh->print("	if (tfp) tfp->dump (main_time);\n");
+	if ($self->{trace} && !$self->sc_or_sp) {
+	    $fh->print("	if (tfp) tfp->dump (main_time);\n");
+	}
 	$fh->print("#endif\n");
     }
 
@@ -1076,7 +1078,7 @@ sub _print_advance_time {
     } else {
 	if ($action) {
 	    print $fh "	${set}eval();\n";
-	    if ($self->{trace} && !$self->{sp}) {
+	    if ($self->{trace} && !$self->sc_or_sp) {
 		$fh->print("#if VM_TRACE\n");
 		$fh->print("	if (tfp) tfp->dump (main_time);\n");
 		$fh->print("#endif //VM_TRACE\n");
