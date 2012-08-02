@@ -14,17 +14,11 @@ module t (clk);
    reg [1:0]    res_in = 0;
    reg [1:0]    res_out = 0;
 
-   wire [1:0] 	to_test;
-   wire [1:0] 	from_test;
-
-   assign to_test = res_in;
-   assign res_out = from_test;
-
    // The test instantiates a connection which swaps bits from input to
    // output.
    test test_i (.clk (clk),
-		.invec (to_test),
-		.outvec (from_test));
+		.invec (res_in),
+		.outvec (res_out));
 
    always @(posedge clk) begin
       res_in <= res_in + 1;

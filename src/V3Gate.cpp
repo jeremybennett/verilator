@@ -635,22 +635,32 @@ void GateVisitor::splitSignals() {
 	 itp;
 	 itp=itp->verticesNextp()) {
 	if (GateVarVertex *vvertexp = dynamic_cast<GateVarVertex *>(itp)) {
-	    /* All VAR vertices are VarScopes. We need to look at the connected
-	     * logic to work out which bits are being used! */
+	    // All VAR vertices are VarScopes. We need to look at the connected
+	    // logic to work out which bits are being used!
 	    UINFO(0,"Vertex: " << vvertexp->varScp() << endl);
 	    for (V3GraphEdge *edgep = vvertexp->inBeginp();
 		 edgep;
 		 edgep = edgep->inNextp()) {
-		// Sources are logic driving this variable as l-value
+		// Sources are logic driving this variable as l-value. Only
+		// possible logic elements are:
+		// AstAlways
+		// AstAlwaysPublic
+		// AstCFunc
+		// AstSenItem
+		// AstSenGate
+		// AstInitial
+		// AstAssignAlias
+		// AstAssignW
+		// AstCoverToggle
+		// AstAstTraceInc
 		GateLogicVertex *lvertexp =
 		    dynamic_cast<GateLogicVertex *>(edgep->fromp());
 		UINFO(0,"  Edge from " << lvertexp->nodep() << endl);
-		// 
 	    }
 	    for (V3GraphEdge *edgep = vvertexp->outBeginp();
 		 edgep;
 		 edgep = edgep->outNextp()) {
-		// Sinks are logic to driven by this variable as r-value
+		// Sinks are logic driven by this variable as r-value
 		GateLogicVertex *lvertexp =
 		    dynamic_cast<GateLogicVertex *>(edgep->top());
 		UINFO(0,"  Edge to " << lvertexp->nodep() << endl);
