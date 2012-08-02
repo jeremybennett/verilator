@@ -5,55 +5,35 @@
 // This file ONLY is placed into the Public Domain, for any use,
 // without warranty, 2012 by Jeremy Bennett.
 
-module t (input clk);
+module t (clk);
 
-   reg [1:0]
+   input  clk;
+
+   integer      cnt = 0;
+
+   reg [1:0]    res_in = 0;
+   reg [1:0]    res_out = 0;
+
    wire [1:0] 	to_test;
    wire [1:0] 	from_test;
 
-   // The test instantiates
-   // Take CRC data and apply to testblock inputs
-   wire [31:0]  in = crc[31:0];
+   assign to_test = res_in;
+   assign res_out = from_test;
 
-   /*AUTOWIRE*/
-   // Beginning of automatic wires (for undeclared instantiated-module outputs)
-   wire [31:0] 		out;			// From test of Test.v
-   // End of automatics
+   // The test instantiates a connection which swaps bits from input to
+   // output.
+   test test_i (.clk (clk),
+		.invec (to_test),
+		.outvec (from_test));
 
-   Test test (/*AUTOINST*/
-	      // Outputs
-	      .out			(out[31:0]),
-	      // Inputs
-	      .clk			(clk),
-	      .in			(in[31:0]));
+   always @(posedge clk) begin
+      res_in <= res_in + 1;
+   end
 
-   // Aggregate outputs into a single result vector
-   wire [63:0] result = {32'h0, out};
-
-   // Test loop
-   always @ (posedge clk) begin
-`ifdef TEST_VERBOSE
-      $write("[%0t] cyc==%0d crc=%x result=%x\n",$time, cyc, crc, result);
-`endif
-      cyc <= cyc + 1;
-      crc <= {crc[62:0], crc[63]^crc[2]^crc[0]};
-      sum <= result ^ {sum[62:0],sum[63]^sum[2]^sum[0]};
-      if (cyc==0) begin
-	 // Setup
-	 crc <= 64'h5aef0c8d_d70a4497;
-	 sum <= 64'h0;
-      end
-      else if (cyc<10) begin
-	 sum <= 64'h0;
-      end
-      else if (cyc<90) begin
-      end
-      else if (cyc==99) begin
-	 $write("[%0t] cyc==%0d crc=%x sum=%x\n",$time, cyc, crc, sum);
-	 if (crc !== 64'hc77bb9b3784ea091) $stop;
-	 // What checksum will we end up with (above print should match)
-`define EXPECTED_SUM 64'h4afe43fb79d7b71e
-	 if (sum !== `EXPECTED_SUM) $stop;
+   // Count clk edges to terminate.
+   always @(posedge clk) begin
+      cnt = cnt + 1;
+      if (cnt == 5) begin
 	 $write("*-* All Finished *-*\n");
 	 $finish;
       end
@@ -62,13 +42,13 @@ module t (input clk);
 endmodule
 
 
-module Test (
+module test (
   input        clk,
   input [1:0]  invec,
   output [1:0] outvec);
 
    always @(posedge clk) begin
-      out [0] <= in [1];
-      out [1] <= in [0];
+      outvec [0] <= invec [1];
+      outvec [1] <= invec [0];
    end
 endmodule
