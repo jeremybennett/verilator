@@ -256,6 +256,8 @@ private:
     bool		m_activeReducible;	// Is activation block reducible?
     bool		m_inSenItem;	// Underneath AstSenItem; any varrefs are clocks
     bool		m_inSlow;	// Inside a slow structure
+    AstNode            *m_lsbp;		//!< LSB inside select
+    AstNode            *m_widthp;	//!< Width inside select
     V3Double0		m_statSigs;	// Statistic tracking
     V3Double0		m_statRefs;	// Statistic tracking
 
@@ -359,6 +361,10 @@ private:
 	    if (!m_logicVertexp) nodep->v3fatalSrc("Var ref not under a logic block\n");
 	    AstVarScope* varscp = nodep->varScopep();
 	    if (!varscp) nodep->v3fatalSrc("Var didn't get varscoped in V3Scope.cpp\n");
+	    if (m_lsbp) {
+		UINFO(0, "VarRef lsbp:   " << m_lsbp << endl);
+		UINFO(0, "VarRef widthp: " << m_widthp << endl);
+	    }
 	    GateVarVertex* vvertexp = makeVarVertex(varscp);
 	    UINFO(5," VARREF to "<<varscp<<endl);
 	    if (m_inSenItem) vvertexp->setIsClock();
@@ -435,6 +441,18 @@ private:
 	}
 	nodep->iterateChildren(*this);
     }
+    //! Record selector details for bit graph
+    virtual void visit(AstSel *nodep, AstNUser*) {
+	AstNode *old_lsbp = m_lsbp;
+	AstNode *old_widthp = m_widthp;
+	m_lsbp = nodep->lsbp();
+	m_widthp = nodep->widthp();
+	UINFO(0, "Select lspb:  " << m_lsbp << endl);
+	UINFO(0, "Select width: " << m_widthp << endl);
+	nodep->iterateChildren(*this);
+	m_lsbp = old_lsbp;
+	m_widthp = old_widthp;
+    }
 
     //--------------------
     // Default
@@ -453,6 +471,8 @@ public:
 	m_activeReducible = true;
 	m_inSenItem = false;
 	m_inSlow = false;
+	m_lsbp = NULL;
+	m_widthp = NULL;
 	nodep->accept(*this);
     }
     virtual ~GateVisitor() {
@@ -637,7 +657,8 @@ void GateVisitor::splitSignals() {
 	if (GateVarVertex *vvertexp = dynamic_cast<GateVarVertex *>(itp)) {
 	    // All VAR vertices are VarScopes. We need to look at the connected
 	    // logic to work out which bits are being used!
-	    UINFO(0,"Vertex: " << vvertexp->varScp() << endl);
+	    string name = vvertexp->varScp()->varp()->name();
+	    UINFO(0,"Vertex: " << name << endl);
 	    for (V3GraphEdge *edgep = vvertexp->inBeginp();
 		 edgep;
 		 edgep = edgep->inNextp()) {
@@ -655,15 +676,74 @@ void GateVisitor::splitSignals() {
 		// AstAstTraceInc
 		GateLogicVertex *lvertexp =
 		    dynamic_cast<GateLogicVertex *>(edgep->fromp());
-		UINFO(0,"  Edge from " << lvertexp->nodep() << endl);
+		AstNode *nodep = lvertexp->nodep();
+
+		if (nodep->castAlways()) {
+		    UINFO(0, "  Edge from ALWAYS" << endl);
+		} else if (nodep->castAlwaysPublic()) {
+		    UINFO(0, "  Edge from ALWAYSPUBLIC" << endl);
+		} else if (nodep->castCFunc()) {
+		    UINFO(0, "  Edge from CFUNC" << endl);
+		} else if (nodep->castSenItem()) {
+		    UINFO(0, "  Edge from SENITEM" << endl);
+		} else if (nodep->castSenGate()) {
+		    UINFO(0, "  Edge from SENGATE" << endl);
+		} else if (nodep->castInitial()) {
+		    UINFO(0, "  Edge from INITIAL" << endl);
+		} else if (nodep->castAssignAlias()) {
+		    UINFO(0, "  Edge from ASSIGNALIAS" << endl);
+		} else if (nodep->castAssignW()) {
+		    UINFO(0, "  Edge from ASSIGNW" << endl);
+		} else if (nodep->castCoverToggle()) {
+		    UINFO(0, "  Edge from COVERTOGGLE" << endl);
+		} else if (nodep->castTraceInc()) {
+		    UINFO(0, "  Edge from TRACEINC" << endl);
+		} else {
+		    UINFO(0, "  *** Unknown edge " << nodep << endl);
+		}
 	    }
 	    for (V3GraphEdge *edgep = vvertexp->outBeginp();
 		 edgep;
 		 edgep = edgep->outNextp()) {
-		// Sinks are logic driven by this variable as r-value
+		// Sinks are logic driven by this variable as r-value. Only
+		// possible logic elements are:
+		// AstAlways
+		// AstAlwaysPublic
+		// AstCFunc
+		// AstSenItem
+		// AstSenGate
+		// AstInitial
+		// AstAssignAlias
+		// AstAssignW
+		// AstCoverToggle
+		// AstAstTraceInc
 		GateLogicVertex *lvertexp =
 		    dynamic_cast<GateLogicVertex *>(edgep->top());
-		UINFO(0,"  Edge to " << lvertexp->nodep() << endl);
+		AstNode *nodep = lvertexp->nodep();
+
+		if (nodep->castAlways()) {
+		    UINFO(0, "  Edge to ALWAYS" << endl);
+		} else if (nodep->castAlwaysPublic()) {
+		    UINFO(0, "  Edge to ALWAYSPUBLIC" << endl);
+		} else if (nodep->castCFunc()) {
+		    UINFO(0, "  Edge to CFUNC" << endl);
+		} else if (nodep->castSenItem()) {
+		    UINFO(0, "  Edge to SENITEM" << endl);
+		} else if (nodep->castSenGate()) {
+		    UINFO(0, "  Edge to SENGATE" << endl);
+		} else if (nodep->castInitial()) {
+		    UINFO(0, "  Edge to INITIAL" << endl);
+		} else if (nodep->castAssignAlias()) {
+		    UINFO(0, "  Edge to ASSIGNALIAS" << endl);
+		} else if (nodep->castAssignW()) {
+		    UINFO(0, "  Edge to ASSIGNW" << endl);
+		} else if (nodep->castCoverToggle()) {
+		    UINFO(0, "  Edge to COVERTOGGLE" << endl);
+		} else if (nodep->castTraceInc()) {
+		    UINFO(0, "  Edge to TRACEINC" << endl);
+		} else {
+		    UINFO(0, "  *** Unknown edge " << nodep << endl);
+		}
 	    }
 	}
     }

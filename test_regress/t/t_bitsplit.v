@@ -9,8 +9,6 @@ module t (clk);
 
    input  clk;
 
-   integer      cnt = 0;
-
    reg [1:0]    res_in = 0;
    reg [1:0]    res_out = 0;
 
@@ -26,8 +24,7 @@ module t (clk);
 
    // Count clk edges to terminate.
    always @(posedge clk) begin
-      cnt = cnt + 1;
-      if (cnt == 5) begin
+      if (res_out == 2'b11) begin
 	 $write("*-* All Finished *-*\n");
 	 $finish;
       end
