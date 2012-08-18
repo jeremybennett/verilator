@@ -5,7 +5,17 @@ indicates the contributor was also the author of the fix; Thanks!
 
 * Verilator 3.84*** devel
 
+***   Support '{} assignment pattern on structures, part of bug355.
+
 ****  Fix double-deep parameter cell WIDTHs, bug541.  [Hiroki Honda]
+
+****  Fix imports under multiple instantiated cells, bug542.  [Alex Solomatnikov]
+
+****  Fix defparam in generate broke in 3.840, bug543.  [Alex Solomatnikov]
+
+****  Fix duplicate begin error broke in 3.840, bug548.  [Alex Solomatnikov]
+
+****  Fix triangle symbol resolution error broke in 3.840, bug550.  [Ted Campbell]
 
 
 * Verilator 3.840 2012/07/31 Beta
