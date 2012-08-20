@@ -14,32 +14,6 @@ the first for reference for developers and debugging problems.
 
 See also the Verilator internals presentation at http://www.veripool.org.
 
-=head1 ADDING A NEW FEATURE
-
-Generally what would you do to add a new feature?
-
-=over 4
-
-File a bug (if there isn't already) so others know what you're working on.
-
-Make a testcase in the test_regress/t/t_EXAMPLE format, see TESTING Below.
-
-If grammar changes are needed, look at the git version of VerilogPerl's
-src/VParseGrammar.y, as this grammar supports the full SystemVerilog
-language and has a lot of back-and-forth with Verilator's grammar.  Copy
-the appropriate rules to src/verilog.y and modify the productions.
-
-If a new Ast type is needed, add it to V3AstNodes.h.
-
-Now you can run "test_regress/t/t_{new testcase}.pl --debug" and it'll
-probably fail but you'll see a test_regress/obj_dir/t_{newtestcase}/*.tree
-file which you can examine to see if the parsing worked. See also the
-sections below on debugging.
-
-Modify the later visitor functions to process the new feature as needed.
-
-=back
-
 =head1 CODE FLOWS
 
 =head2 Verilator Flow
@@ -547,6 +521,52 @@ backtrace. You will typically see a frame sequence something like
   accept()
   visit()
   ...
+
+=head1 ADDING A NEW FEATURE
+
+Generally what would you do to add a new feature?
+
+=over 4
+
+=item 1.
+
+File a bug (if there isn't already) so others know what you're working on.
+
+=item 2.
+
+Make a testcase in the test_regress/t/t_EXAMPLE format, see TESTING Below.
+
+=item 3.
+
+If grammar changes are needed, look at the git version of VerilogPerl's
+src/VParseGrammar.y, as this grammar supports the full SystemVerilog
+language and has a lot of back-and-forth with Verilator's grammar.  Copy
+the appropriate rules to src/verilog.y and modify the productions.
+
+=item 4.
+
+If a new Ast type is needed, add it to V3AstNodes.h.
+
+=back
+
+Now you can run "test_regress/t/t_{new testcase}.pl --debug" and it'll
+probably fail but you'll see a test_regress/obj_dir/t_{newtestcase}/*.tree
+file which you can examine to see if the parsing worked. See also the
+sections above on debugging.
+
+Modify the later visitor functions to process the new feature as needed.
+
+=head2 Adding a new pass
+
+For more substantial changes you may need to add a new pass. The simplest way
+to do this is to copy the C<.cpp> and C<.h> files from an existing
+pass. You'll need to add a call into your pass from the C<process()> function
+in C<src/verilator.cpp>.
+
+To get your pass to build you'll need to add its binary filename to the list
+in C<src/Makefile_obj.in> and reconfigure.
+
+=back
 
 =head1 DISTRIBUTION
 

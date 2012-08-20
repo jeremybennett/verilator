@@ -46,12 +46,11 @@
 #include "V3Const.h"
 #include "V3Stats.h"
 
-typedef list<AstNodeVarRef*> GateVarRefList;
-
 
 //######################################################################
 // Support classes
 
+//! Base class for logic and variable vertices
 class BitloopEitherVertex : public V3GraphVertex {
     AstScope*	m_scopep;
 public:
@@ -63,14 +62,21 @@ public:
     AstScope* scopep() const { return m_scopep; }
 };
 
+//! Class for a variable vertex
+
+//! These are always associated with a VarScope node. Each VarScope AST node
+//! has a single entry in the graph originally. We'll rewrite to split where
+//! the node is referred to by different sizes in graphs.
 class BitloopVarVertex : public BitloopEitherVertex {
-    AstVarScope* m_varScp;
-    bool	 m_isTop;
-    bool	 m_isClock;
+    AstVarScope* m_varScp;	//!< The AstVarScope associated with this vertex
+    bool	 m_isTop;	//!< TRUE if we are TOP scope
+    bool	 m_isClock;	//!< TRUE for clocked cars
 public:
+    //! Constructor
     BitloopVarVertex(V3Graph* graphp, AstScope* scopep, AstVarScope* varScp)
 	: BitloopEitherVertex(graphp, scopep), m_varScp(varScp), m_isTop(false)
 	, m_isClock(false) {}
+    //! Destructor (currently empty)
     virtual ~BitloopVarVertex() {}
     // Accessors
     AstVarScope* varScp() const { return m_varScp; }
@@ -86,13 +92,30 @@ public:
     void setIsClock() { m_isClock = true; }
 };
 
+//! Class for a logic vertex
+
+//! The logic entities which can drive or be drive by a net are 
+//! - AstAlways
+//! - AstAlwaysPublic
+//! - AstCFunc
+//! - AstSenItem
+//! - AstSenGate
+//! - AstInitial
+//! - AstAssignAlias
+//! - AstAssignW
+//! - AstCoverToggle
+//! - AstAstTraceInc
 class BitloopLogicVertex : public BitloopEitherVertex {
-    AstNode*	m_nodep;
-    AstActive*	m_activep;	// Under what active; NULL is ok (under cfunc or such)
+    AstNode*	m_nodep;	//!< The logic node associated with this vertex
+    AstActive*	m_activep;	//!< Under what active; NULL is ok (under CFUNC
+				//!< or such)
 public:
+    //! Constructor
     BitloopLogicVertex(V3Graph* graphp, AstScope* scopep, AstNode* nodep,
-		    AstActive* activep)
-	: BitloopEitherVertex(graphp,scopep), m_nodep(nodep), m_activep(activep) {}
+		       AstActive* activep)
+	: BitloopEitherVertex(graphp,scopep), m_nodep(nodep)
+	, m_activep(activep) {}
+    //! Destructor (currently empty)
     virtual ~BitloopLogicVertex() {}
     // Accessors
     virtual string name() const {
@@ -104,6 +127,37 @@ public:
     virtual string dotColor() const { return "yellow"; }
     AstNode* nodep() const { return m_nodep; }
     AstActive* activep() const { return m_activep; }
+};
+
+//! Class for an edge between logic and var nodes
+
+//! Dervied from standard base class to capture bit- or part-select data of
+//! the reference.
+class BitloopEdge : public V3GraphEdge {
+    int  m_lsb;		//!< LSB of select
+    int  m_width;	//!< Width of select (zero if no select)
+
+public:
+    //! Constructor (sets LSB and width)
+    BitloopEdge(V3Graph *graphp, BitloopEitherVertex *fromp,
+		BitloopEitherVertex *top, int weight, int lsb, int width)
+	: V3GraphEdge (graphp, fromp, top, weight), m_lsb(lsb)
+	, m_width(width) {}
+    //! Destructor (currently empty)
+    virtual ~BitloopEdge() {}
+    //! Label accessor is any selection specified
+    virtual string dotLabel() const {
+	if (m_width) {
+	    return ("[" + cvtToStr(m_lsb + m_width - 1) + ":" + cvtToStr(m_lsb)
+		    + "]");
+	} else {
+	    return "";
+	}
+    }
+    int lsb() { return m_lsb; }
+    void lsb (int lsb) { m_lsb = lsb; }
+    int width() { return m_width; }
+    void width (int width) { m_width = width; }
 };
 
 //######################################################################
@@ -184,22 +238,17 @@ private:
 	    if (!m_logicVertexp) nodep->v3fatalSrc("Var ref not under a logic block\n");
 	    AstVarScope* varscp = nodep->varScopep();
 	    if (!varscp) nodep->v3fatalSrc("Var didn't get varscoped in V3Scope.cpp\n");
-	    if (m_width) {
-		UINFO(0, "VarRef " << nodep->name() << ", lsbp: " << m_lsb
-		      << ", width: " << m_width << endl);
-	    }
-	    else {
-		UINFO(0, "VarRef " << nodep->name() << " w/o select" << endl);
-	    }
 	    BitloopVarVertex* vvertexp = makeVarVertex(varscp);
 	    UINFO(5," VARREF to "<<varscp<<endl);
 	    if (m_inSenItem) vvertexp->setIsClock();
 	    // We use weight of one; if we ref the var more than once, when we
 	    // simplify, the weight will increase
 	    if (nodep->lvalue()) {
-		new V3GraphEdge(&m_graph, m_logicVertexp, vvertexp, 1);
+		new BitloopEdge(&m_graph, m_logicVertexp, vvertexp, 1, m_lsb,
+				m_width);
 	    } else {
-		new V3GraphEdge(&m_graph, vvertexp, m_logicVertexp, 1);
+		new BitloopEdge(&m_graph, vvertexp, m_logicVertexp, 1, m_lsb,
+				m_width);
 	    }
 	}
     }
@@ -361,6 +410,17 @@ void BitloopVisitor::splitSignals() {
 		AstNode *nodep = lvertexp->nodep();
 
 		UINFO(0, "  Edge to " << nodep->typeName () << endl);
+
+		// The edges from the logic node are the variables driven by it
+		// (i.e.l-values).
+		for (V3GraphEdge *edge2p = lvertexp->outBeginp();
+		     edge2p;
+		     edge2p = edge2p->outNextp()) {
+		    BitloopVarVertex *vvertex2p =
+			dynamic_cast<BitloopVarVertex *>(edgep->fromp());
+		    string name2 = vvertex2p->varScp()->varp()->name();
+		    UINFO(0,"    Vertex: " << name2 << endl);
+		}
 	    }
 	}
     }
