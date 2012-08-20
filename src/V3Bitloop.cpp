@@ -81,7 +81,7 @@ public:
     // Accessors
     AstVarScope* varScp() const { return m_varScp; }
     virtual string name() const {
-	return (cvtToStr((void*)m_varScp) + " " + varScp()->name() + "\\n"
+	return (cvtToStr((void*)m_varScp) + " " + varScp()->prettyName() + "\\n"
 		+ m_varScp->fileline()->filebasename() + ":"
 		+ cvtToStr(m_varScp->fileline()->lineno()));
     }
@@ -204,14 +204,14 @@ private:
 	return vertexp;
     }
 
-    void splitSignals();
+    void reportOrigVars();
 
     // VISITORS
     virtual void visit(AstNetlist* nodep, AstNUser*) {
 	nodep->iterateChildren(*this);
 	m_graph.dumpDotFilePrefixed("bitloop_pre");
 	// Split per-bit sections into multiple vertices.
-	splitSignals();
+	reportOrigVars();
 	m_graph.dumpDotFilePrefixed("bitloop_split");
     }
     virtual void visit(AstNodeModule* nodep, AstNUser*) {
@@ -342,13 +342,8 @@ public:
 
 //----------------------------------------------------------------------
 
-//! Rewrite the graph, splitting signals that are selected.
-
-//! Many designs aggregate signals, and we cannot see the dependencies in the
-//! netlist broken down into these sub-signals.
-
-//! This is preliminary work towards dealing with UNOPTFLAT automatically.
-void BitloopVisitor::splitSignals() {
+//! Report the variables driving and being driven
+void BitloopVisitor::reportOrigVars() {
     // Loop through all the vertices
     for (V3GraphVertex* itp = m_graph.verticesBeginp();
 	 itp;
@@ -356,28 +351,15 @@ void BitloopVisitor::splitSignals() {
 	if (BitloopVarVertex *vvertexp = dynamic_cast<BitloopVarVertex *>(itp)) {
 	    // All VAR vertices are VarScopes. We need to look at the connected
 	    // logic to work out which bits are being used!
-	    string name = vvertexp->varScp()->varp()->name();
-	    UINFO(0,"Vertex: " << name << endl);
+	    string name = vvertexp->varScp()->varp()->prettyName();
+	    UINFO(0, name << endl);
 	    for (V3GraphEdge *edgep = vvertexp->inBeginp();
 		 edgep;
 		 edgep = edgep->inNextp()) {
-		// Sources are logic driving this variable as l-value. Only
-		// possible logic elements are:
-		// AstAlways
-		// AstAlwaysPublic
-		// AstCFunc
-		// AstSenItem
-		// AstSenGate
-		// AstInitial
-		// AstAssignAlias
-		// AstAssignW
-		// AstCoverToggle
-		// AstAstTraceInc
+		// Sources are logic driving this variable as l-value.
 		BitloopLogicVertex *lvertexp =
 		    dynamic_cast<BitloopLogicVertex *>(edgep->fromp());
 		AstNode *nodep = lvertexp->nodep();
-
-		UINFO(0, "  Edge from " << nodep->typeName () << endl);
 
 		// The edges into the logic node are the variables driving it
 		// (i.e. r-values).
@@ -385,31 +367,18 @@ void BitloopVisitor::splitSignals() {
 		     edge2p;
 		     edge2p = edge2p->inNextp()) {
 		    BitloopVarVertex *vvertex2p =
-			dynamic_cast<BitloopVarVertex *>(edgep->top());
-		    string name2 = vvertex2p->varScp()->varp()->name();
-		    UINFO(0,"    Vertex: " << name2 << endl);
+			dynamic_cast<BitloopVarVertex *>(edge2p->fromp());
+		    string name2 = vvertex2p->varScp()->varp()->prettyName();
+		    UINFO(0,"  <- " << name2 << endl);
 		}
 	    }
 	    for (V3GraphEdge *edgep = vvertexp->outBeginp();
 		 edgep;
 		 edgep = edgep->outNextp()) {
-		// Sinks are logic driven by this variable as r-value. Only
-		// possible logic elements are:
-		// AstAlways
-		// AstAlwaysPublic
-		// AstCFunc
-		// AstSenItem
-		// AstSenGate
-		// AstInitial
-		// AstAssignAlias
-		// AstAssignW
-		// AstCoverToggle
-		// AstAstTraceInc
+		// Sinks are logic driven by this variable as r-value.
 		BitloopLogicVertex *lvertexp =
 		    dynamic_cast<BitloopLogicVertex *>(edgep->top());
 		AstNode *nodep = lvertexp->nodep();
-
-		UINFO(0, "  Edge to " << nodep->typeName () << endl);
 
 		// The edges from the logic node are the variables driven by it
 		// (i.e.l-values).
@@ -417,9 +386,9 @@ void BitloopVisitor::splitSignals() {
 		     edge2p;
 		     edge2p = edge2p->outNextp()) {
 		    BitloopVarVertex *vvertex2p =
-			dynamic_cast<BitloopVarVertex *>(edgep->fromp());
-		    string name2 = vvertex2p->varScp()->varp()->name();
-		    UINFO(0,"    Vertex: " << name2 << endl);
+			dynamic_cast<BitloopVarVertex *>(edge2p->top());
+		    string name2 = vvertex2p->varScp()->varp()->prettyName();
+		    UINFO(0,"  -> " << name2 << endl);
 		}
 	    }
 	}

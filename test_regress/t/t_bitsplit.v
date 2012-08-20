@@ -39,7 +39,6 @@ module test (
   output [1:0] outvec);
 
    always @(posedge clk) begin
-      outvec [0] <= invec [1];
-      outvec [1] <= invec [0];
+      outvec <= {invec[0], invec[1]};
    end
 endmodule
