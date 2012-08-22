@@ -43,12 +43,13 @@
 #include "V3Bitloop.h"
 #include "V3Ast.h"
 #include "V3Graph.h"
+#include "V3GraphAlg.h"
 #include "V3Const.h"
 #include "V3Stats.h"
 
 
-//######################################################################
-// Support classes
+// #############################################################################
+// Graph Support classes
 
 //! Base class for logic and variable vertices
 class BitloopEitherVertex : public V3GraphVertex {
@@ -94,7 +95,7 @@ public:
 
 //! Class for a logic vertex
 
-//! The logic entities which can drive or be drive by a net are 
+//! The logic entities which can drive or be driven by a net are 
 //! - AstAlways
 //! - AstAlwaysPublic
 //! - AstCFunc
@@ -131,7 +132,7 @@ public:
 
 //! Class for an edge between logic and var nodes
 
-//! Dervied from standard base class to capture bit- or part-select data of
+//! Derived from standard base class to capture bit- or part-select data of
 //! the reference.
 class BitloopEdge : public V3GraphEdge {
     int  m_lsb;		//!< LSB of select
@@ -160,7 +161,169 @@ public:
     void width (int width) { m_width = width; }
 };
 
-//######################################################################
+
+// #############################################################################
+// Algorithm support classes
+
+//! Class to report the variable relationships in the origial graph.
+class GraphReportOrigVars : GraphAlg {
+
+private:
+    //! Iterate all vertices which are VarRef nodes
+    void main () {
+	for (V3GraphVertex* itp = m_graphp->verticesBeginp();
+	     itp;
+	     itp=itp->verticesNextp()) {
+	    // All VAR vertices are VarScopes. We need to look at the
+	    // connected logic to work out which bits are being used
+	    if (BitloopVarVertex *vp = dynamic_cast<BitloopVarVertex *>(itp)) {
+		iterateVarVertex (vp);
+	    }
+	}
+    }
+    //! Find the logic connected to a var, and then all the driving/driven vars
+    void iterateVarVertex (BitloopVarVertex *vvertexp) {
+	string name = vvertexp->varScp()->varp()->prettyName();
+	UINFO(0, name << endl);
+	for (V3GraphEdge *edgep = vvertexp->inBeginp();
+	     edgep;
+	     edgep = edgep->inNextp()) {
+	    if (followEdge(edgep)) {
+		// Sources are logic driving this variable as l-value.
+		BitloopLogicVertex *lvertexp =
+		    dynamic_cast<BitloopLogicVertex *>(edgep->fromp());
+		iterateLogicFromVertex(lvertexp);
+	    }
+	}
+	for (V3GraphEdge *edgep = vvertexp->outBeginp();
+	     edgep;
+	     edgep = edgep->outNextp()) {
+	    if (followEdge(edgep)) {
+		// Sinks are logic driven by this variable as r-value.
+		BitloopLogicVertex *lvertexp =
+		    dynamic_cast<BitloopLogicVertex *>(edgep->top());
+		iterateLogicToVertex(lvertexp);
+	    }
+	}
+    }
+    //! Iterate the edges of a logic vertext to find driving vars
+    void iterateLogicFromVertex (BitloopLogicVertex *lvertexp) {
+	for (V3GraphEdge *edgep = lvertexp->inBeginp();
+	     edgep;
+	     edgep = edgep->inNextp()) {
+	    BitloopVarVertex *vvertexp =
+		dynamic_cast<BitloopVarVertex *>(edgep->fromp());
+	    string name = vvertexp->varScp()->varp()->prettyName();
+	    UINFO(0,("  <- ") << name << endl);
+	}
+    }
+    //! Iterate the edges of a logic vertext to find driven vars
+    void iterateLogicToVertex (BitloopLogicVertex *lvertexp) {
+	for (V3GraphEdge *edgep = lvertexp->outBeginp();
+	     edgep;
+	     edgep = edgep->outNextp()) {
+	    BitloopVarVertex *vvertexp =
+		dynamic_cast<BitloopVarVertex *>(edgep->top());
+	    string name = vvertexp->varScp()->varp()->prettyName();
+	    UINFO(0,("  -> ") << name << endl);
+	}
+    }
+	    
+
+public:
+    //! Constructor
+    GraphReportOrigVars(V3Graph* graphp)
+	: GraphAlg(graphp, &V3GraphEdge::followAlwaysTrue) {
+	main();
+    }
+    //! Destructor (currently empty)
+    ~GraphReportOrigVars() {}
+};
+
+
+//! Class to strip out unneeded logic vertices.
+
+//! Logic nodes with no edges connecting them can be removed. Logic nodes
+//! connecting vars can be removed, with edges directly connecting the vars.
+
+//! The only logic nodes which remain are sinks and sources.
+class GraphStripLogic : GraphAlg {
+
+private:
+    //! Iterate all vertices which are logic nodes
+    void main () {
+	for (V3GraphVertex* itp = m_graphp->verticesBeginp();
+	     itp;
+	     itp=itp->verticesNextp()) {
+	    // All VAR vertices are VarScopes. We need to look at the
+	    // connected logic to work out which bits are being used
+	    if (BitloopVarVertex *lp =
+		dynamic_cast<BitloopVarVertex *>(itp)) {
+		iterateVarVertex (lp);
+	    }
+	}
+    }
+    //! Try to eliminate logic nodes
+    void iterateVarVertex (BitloopVarVertex *vvertexp) {
+	string name = vvertexp->varScp()->varp()->prettyName();
+	UINFO(0, name << endl);
+	for (V3GraphEdge *edgep = vvertexp->inBeginp();
+	     edgep;
+	     edgep = edgep->inNextp()) {
+	    if (followEdge(edgep)) {
+		// Sources are logic driving this variable as l-value.
+		BitloopLogicVertex *lvertexp =
+		    dynamic_cast<BitloopLogicVertex *>(edgep->fromp());
+		iterateLogicFromVertex(lvertexp);
+	    }
+	}
+	for (V3GraphEdge *edgep = vvertexp->outBeginp();
+	     edgep;
+	     edgep = edgep->outNextp()) {
+	    if (followEdge(edgep)) {
+		// Sinks are logic driven by this variable as r-value.
+		BitloopLogicVertex *lvertexp =
+		    dynamic_cast<BitloopLogicVertex *>(edgep->top());
+		iterateLogicToVertex(lvertexp);
+	    }
+	}
+    }
+    //! Iterate the edges of a logic vertext to find driving vars
+    void iterateLogicFromVertex (BitloopLogicVertex *lvertexp) {
+	for (V3GraphEdge *edgep = lvertexp->inBeginp();
+	     edgep;
+	     edgep = edgep->inNextp()) {
+	    BitloopVarVertex *vvertexp =
+		dynamic_cast<BitloopVarVertex *>(edgep->fromp());
+	    string name = vvertexp->varScp()->varp()->prettyName();
+	    UINFO(0,("  <- ") << name << endl);
+	}
+    }
+    //! Iterate the edges of a logic vertext to find driven vars
+    void iterateLogicToVertex (BitloopLogicVertex *lvertexp) {
+	for (V3GraphEdge *edgep = lvertexp->outBeginp();
+	     edgep;
+	     edgep = edgep->outNextp()) {
+	    BitloopVarVertex *vvertexp =
+		dynamic_cast<BitloopVarVertex *>(edgep->top());
+	    string name = vvertexp->varScp()->varp()->prettyName();
+	    UINFO(0,("  -> ") << name << endl);
+	}
+    }
+	    
+
+public:
+    //! Constructor
+    GraphStripLogic(V3Graph* graphp)
+	: GraphAlg(graphp, &V3GraphEdge::followAlwaysTrue) {
+	main();
+    }
+    //! Destructor (currently empty)
+    ~GraphStripLogic() {}
+};
+
+
+// #############################################################################
 // Bitloop class functions
 
 //! Visitor to build graph of bit loops
@@ -204,14 +367,12 @@ private:
 	return vertexp;
     }
 
-    void reportOrigVars();
-
     // VISITORS
     virtual void visit(AstNetlist* nodep, AstNUser*) {
 	nodep->iterateChildren(*this);
+	GraphReportOrigVars alg (&m_graph);
 	m_graph.dumpDotFilePrefixed("bitloop_pre");
-	// Split per-bit sections into multiple vertices.
-	reportOrigVars();
+	GraphStripLogic alg2 (&m_graph);
 	m_graph.dumpDotFilePrefixed("bitloop_split");
     }
     virtual void visit(AstNodeModule* nodep, AstNUser*) {
@@ -241,6 +402,15 @@ private:
 	    BitloopVarVertex* vvertexp = makeVarVertex(varscp);
 	    UINFO(5," VARREF to "<<varscp<<endl);
 	    if (m_inSenItem) vvertexp->setIsClock();
+	    // Width = 0 means we didn't see a SELECT, so use the natural
+	    // width and lsb of the Var's basic type
+	    if (0 == m_width) {
+		AstBasicDType *basicTypep = nodep->dtypep()->basicp();
+		if (basicTypep->isRanged() && !basicTypep->rangep()) {
+		    m_lsb = basicTypep->lsb();
+		    m_width = basicTypep->msb() - m_lsb + 1;
+		}
+	    }
 	    // We use weight of one; if we ref the var more than once, when we
 	    // simplify, the weight will increase
 	    if (nodep->lvalue()) {
@@ -340,63 +510,8 @@ public:
     }
 };
 
-//----------------------------------------------------------------------
 
-//! Report the variables driving and being driven
-void BitloopVisitor::reportOrigVars() {
-    // Loop through all the vertices
-    for (V3GraphVertex* itp = m_graph.verticesBeginp();
-	 itp;
-	 itp=itp->verticesNextp()) {
-	if (BitloopVarVertex *vvertexp = dynamic_cast<BitloopVarVertex *>(itp)) {
-	    // All VAR vertices are VarScopes. We need to look at the connected
-	    // logic to work out which bits are being used!
-	    string name = vvertexp->varScp()->varp()->prettyName();
-	    UINFO(0, name << endl);
-	    for (V3GraphEdge *edgep = vvertexp->inBeginp();
-		 edgep;
-		 edgep = edgep->inNextp()) {
-		// Sources are logic driving this variable as l-value.
-		BitloopLogicVertex *lvertexp =
-		    dynamic_cast<BitloopLogicVertex *>(edgep->fromp());
-		AstNode *nodep = lvertexp->nodep();
-
-		// The edges into the logic node are the variables driving it
-		// (i.e. r-values).
-		for (V3GraphEdge *edge2p = lvertexp->inBeginp();
-		     edge2p;
-		     edge2p = edge2p->inNextp()) {
-		    BitloopVarVertex *vvertex2p =
-			dynamic_cast<BitloopVarVertex *>(edge2p->fromp());
-		    string name2 = vvertex2p->varScp()->varp()->prettyName();
-		    UINFO(0,"  <- " << name2 << endl);
-		}
-	    }
-	    for (V3GraphEdge *edgep = vvertexp->outBeginp();
-		 edgep;
-		 edgep = edgep->outNextp()) {
-		// Sinks are logic driven by this variable as r-value.
-		BitloopLogicVertex *lvertexp =
-		    dynamic_cast<BitloopLogicVertex *>(edgep->top());
-		AstNode *nodep = lvertexp->nodep();
-
-		// The edges from the logic node are the variables driven by it
-		// (i.e.l-values).
-		for (V3GraphEdge *edge2p = lvertexp->outBeginp();
-		     edge2p;
-		     edge2p = edge2p->outNextp()) {
-		    BitloopVarVertex *vvertex2p =
-			dynamic_cast<BitloopVarVertex *>(edge2p->top());
-		    string name2 = vvertex2p->varScp()->varp()->prettyName();
-		    UINFO(0,"  -> " << name2 << endl);
-		}
-	    }
-	}
-    }
-}
-
-
-//######################################################################
+// #############################################################################
 
 //! Bitloop static method for invoking graph analysys
 void V3Bitloop::bitloopAll(AstNetlist *nodep) {

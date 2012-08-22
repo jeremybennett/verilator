@@ -67,6 +67,10 @@ Verilator finally writes the C++ modules.
 
 =head2 Key Classes Used in the Verilator Flow
 
+=over 4
+
+=item C<AstNode>
+
 The AST is represented at the top level by the class C<AstNode>. This abstract
 class has derived classes for the individual components (e.g. C<AstGenerate>
 for a generate block) or groups of components (e.g. C<AstNodeFTask> for
@@ -93,10 +97,63 @@ are at the top of the tree.
 By convention, each function/method uses the variable C<nodep> as a pointer
 to the C<AstNode> currently being processed.
 
+=item C<AstNVistor>
+
 The passes are implemented by AST visitor classes (see L</Visitor
 Functions>). These are implemented by subclasses of the abstract class,
 C<AstNVisitor>. Each pass creates an instance of the visitor class, which
 in turn implements a method to perform the pass.
+
+=item C<V3Graph>
+
+A number of passes use graph algorithms, and the class C<V3Graph> is provided
+to represent those graphs. Graphs are directed, and algorithms are provided to
+manipulate the graphs and to output them in I<GraphViz> dot format (see
+L<http://www.graphviz.org/>). C<V3Graph.h> provides documentation of this
+class.
+
+=item C<V3GraphVertex>
+
+This is the base class for vertices in a graph. Vertices have an associated
+C<fanout>, C<color> and C<rank>, which may be used in algorithms for ordering
+the graph. A generic C<user>/C<userp> member variable is also provided.
+
+Virtual methods are provided to specify the name, color, shape and style to be
+used in dot output. Typically users provided derived classes from
+C<V3GraphVertex> which will reimplement these methods.
+
+Iterators are provided to access in and out edges. Typically these are used in
+the form:
+
+    for (V3GraphEdge *edgep = vertexp->inBeginp();
+         edgep;
+         edgep = edgep->inNextp()) {
+
+=item C<V3GraphEdge>
+
+This is the base class for directed edges between pairs of vertices. Edges
+have an associated C<weight> and may also be maked C<cutable>. A generic
+C<user>/C<userp> member variable is also provided.
+
+Accessors, C<fromp> and C<top> return the "from" and "to" vertices
+respectively.
+
+Virtual methods are provided to specify the label, color and style to be
+used in dot output. Typically users provided derived classes from
+C<V3GraphEdge> which will reimplement these methods.
+
+=item C<V3GraphAlg>
+
+This is the base class for graph algorithms. It implements a C<bool> method,
+C<followEdge> which algorithms can use to decide whether an edge is
+followed. This method returns true if the graph edge has weight greater than
+one and a user function, C<edgeFuncp> (supplied in the constructor) returns
+C<true>.
+
+A number of predefined derived algorithm classes and access methods are
+provided and documented in C<V3GraphAlg.cpp>.
+
+=back
 
 =head2 Verilated Flow
 
