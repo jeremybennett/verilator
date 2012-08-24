@@ -18,8 +18,8 @@
 //
 //*************************************************************************
 
-#ifndef _V3BITLOOP_H_
-#define _V3BITLOOP_H_ 1
+#ifndef _V3BITSPLIT_H_
+#define _V3BITSPLIT_H_ 1
 #include "config_build.h"
 #include "verilatedos.h"
 #include "V3Error.h"
@@ -27,9 +27,9 @@
 
 //============================================================================
 
-class V3Bitloop {
+class V3Bitsplit {
 public:
-    static void bitloopAll(AstNetlist* nodep);
+    static void bitsplitAll(AstNetlist* nodep);
 };
 
 #endif // Guard

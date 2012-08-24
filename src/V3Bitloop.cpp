@@ -17,7 +17,7 @@
 // GNU General Public License for more details.
 //
 //*************************************************************************
-// V3Bitloop's Transformations:
+// V3Bitsplit's Transformations:
 //
 // Extract a graph of the *entire* netlist with cells expanded to show how
 // variables are driven/drive through the logic. Similar to V3Gate, but
@@ -40,7 +40,7 @@
 #include <list>
 
 #include "V3Global.h"
-#include "V3Bitloop.h"
+#include "V3Bitsplit.h"
 #include "V3Ast.h"
 #include "V3Graph.h"
 #include "V3GraphAlg.h"
@@ -52,12 +52,13 @@
 // Graph Support classes
 
 //! Base class for logic and variable vertices
-class BitloopEitherVertex : public V3GraphVertex {
+class BitsplitEitherVertex : public V3GraphVertex {
     AstScope*	m_scopep;
+
 public:
-    BitloopEitherVertex(V3Graph* graphp, AstScope* scopep)
+    BitsplitEitherVertex(V3Graph* graphp, AstScope* scopep)
 	: V3GraphVertex(graphp), m_scopep(scopep) {}
-    virtual ~BitloopEitherVertex() {}
+    virtual ~BitsplitEitherVertex() {}
     // Accessors
     virtual string dotStyle() const { return ""; }
     AstScope* scopep() const { return m_scopep; }
@@ -66,31 +67,46 @@ public:
 //! Class for a variable vertex
 
 //! These are always associated with a VarScope node. Each VarScope AST node
-//! has a single entry in the graph originally. We'll rewrite to split where
-//! the node is referred to by different sizes in graphs.
-class BitloopVarVertex : public BitloopEitherVertex {
+//! has a single entry in the graph originally.
+
+//! We then duplicate the node, so it has one copy for each range (LSB and
+//! width) in which it is used. At which point we associate the range with the
+//! vertex, rather than the edge.
+class BitsplitVarVertex : public BitsplitEitherVertex {
     AstVarScope* m_varScp;	//!< The AstVarScope associated with this vertex
     bool	 m_isTop;	//!< TRUE if we are TOP scope
     bool	 m_isClock;	//!< TRUE for clocked cars
+    int		 m_lsb;		//!< LSB of range
+    int          m_width;	//!< Width (0 if not set yet).
 public:
-    //! Constructor
-    BitloopVarVertex(V3Graph* graphp, AstScope* scopep, AstVarScope* varScp)
-	: BitloopEitherVertex(graphp, scopep), m_varScp(varScp), m_isTop(false)
-	, m_isClock(false) {}
+    //! Constructor based on a varScope
+    BitsplitVarVertex(V3Graph* graphp, AstScope* scopep, AstVarScope* varScp,
+		     int lsb = 0, int width = 0)
+	: BitsplitEitherVertex(graphp, scopep), m_varScp(varScp)
+	, m_isTop(false), m_isClock(false), m_lsb(lsb), m_width(width) {}
+    //! Constructor based on existing vertex
+    BitsplitVarVertex(V3Graph* graphp, BitsplitVarVertex *vvp, int lsb = 0,
+		     int width = 0)
+	: BitsplitEitherVertex(graphp, vvp->scopep())
+	, m_varScp(vvp->varScp()), m_isTop(vvp->isTop())
+	, m_isClock(vvp->isClock()), m_lsb(lsb), m_width(width) {}
     //! Destructor (currently empty)
-    virtual ~BitloopVarVertex() {}
+    virtual ~BitsplitVarVertex() {}
     // Accessors
     AstVarScope* varScp() const { return m_varScp; }
     virtual string name() const {
-	return (cvtToStr((void*)m_varScp) + " " + varScp()->prettyName() + "\\n"
+	string range = m_width ? "[" + cvtToStr(m_lsb + m_width - 1) + ":"
+	    + cvtToStr(m_lsb) + "]"
+	    : "";
+	return (varScp()->prettyName() + range + "\\n"
 		+ m_varScp->fileline()->filebasename() + ":"
 		+ cvtToStr(m_varScp->fileline()->lineno()));
     }
-    virtual string dotColor() const { return "blue"; }
     bool isTop() const { return m_isTop; }
     void setIsTop() { m_isTop = true; }
     bool isClock() const { return m_isClock; }
     void setIsClock() { m_isClock = true; }
+    virtual string dotColor() const { return "blue"; }
 };
 
 //! Class for a logic vertex
@@ -106,209 +122,236 @@ public:
 //! - AstAssignW
 //! - AstCoverToggle
 //! - AstAstTraceInc
-class BitloopLogicVertex : public BitloopEitherVertex {
+class BitsplitLogicVertex : public BitsplitEitherVertex {
     AstNode*	m_nodep;	//!< The logic node associated with this vertex
     AstActive*	m_activep;	//!< Under what active; NULL is ok (under CFUNC
 				//!< or such)
 public:
     //! Constructor
-    BitloopLogicVertex(V3Graph* graphp, AstScope* scopep, AstNode* nodep,
+    BitsplitLogicVertex(V3Graph* graphp, AstScope* scopep, AstNode* nodep,
 		       AstActive* activep)
-	: BitloopEitherVertex(graphp,scopep), m_nodep(nodep)
+	: BitsplitEitherVertex(graphp, scopep), m_nodep(nodep)
 	, m_activep(activep) {}
     //! Destructor (currently empty)
-    virtual ~BitloopLogicVertex() {}
+    virtual ~BitsplitLogicVertex() {}
     // Accessors
     virtual string name() const {
-	return (cvtToStr((void *)m_nodep) + " " + m_nodep->typeName() + "@"
+	return (cvtToStr(m_nodep->typeName()) + "@"
 		+ scopep()->prettyName() + "\\n"
 		+ m_nodep->fileline()->filebasename() + ":"
 		+ cvtToStr(m_nodep->fileline()->lineno()));
     }
-    virtual string dotColor() const { return "yellow"; }
     AstNode* nodep() const { return m_nodep; }
     AstActive* activep() const { return m_activep; }
+    virtual string dotColor() const { return "yellow"; }
 };
 
 //! Class for an edge between logic and var nodes
 
 //! Derived from standard base class to capture bit- or part-select data of
 //! the reference.
-class BitloopEdge : public V3GraphEdge {
-    int  m_lsb;		//!< LSB of select
-    int  m_width;	//!< Width of select (zero if no select)
-
+class BitsplitEdge : public V3GraphEdge {
+    int    m_lsb;		//!< LSB of select
+    int    m_width;		//!< Width of select (zero if no select)
+    string m_dotLabel;		//!< User specified DOT label
 public:
-    //! Constructor (sets LSB and width)
-    BitloopEdge(V3Graph *graphp, BitloopEitherVertex *fromp,
-		BitloopEitherVertex *top, int weight, int lsb, int width)
-	: V3GraphEdge (graphp, fromp, top, weight), m_lsb(lsb)
-	, m_width(width) {}
+    //! Constructor (sets LSB and width), weight always 1
+    BitsplitEdge(V3Graph *graphp, BitsplitEitherVertex *fromp,
+		BitsplitEitherVertex *top, int lsb = 0,
+		int width = 0)
+	: V3GraphEdge(graphp, fromp, top, 1), m_lsb(lsb)
+	, m_width(width), m_dotLabel("") {}
     //! Destructor (currently empty)
-    virtual ~BitloopEdge() {}
-    //! Label accessor is any selection specified
+    virtual ~BitsplitEdge() {}
+    //! Label accessor is any selection specified, else any user specified
+    //! string.
     virtual string dotLabel() const {
 	if (m_width) {
 	    return ("[" + cvtToStr(m_lsb + m_width - 1) + ":" + cvtToStr(m_lsb)
 		    + "]");
 	} else {
-	    return "";
+	    return m_dotLabel;
 	}
     }
+    virtual void dotLabel(string s) { m_dotLabel = s; }
     int lsb() { return m_lsb; }
-    void lsb (int lsb) { m_lsb = lsb; }
+    void lsb(int lsb) { m_lsb = lsb; }
     int width() { return m_width; }
-    void width (int width) { m_width = width; }
+    void width(int width) { m_width = width; }
 };
 
 
 // #############################################################################
 // Algorithm support classes
 
-//! Class to report the variable relationships in the origial graph.
-class GraphReportOrigVars : GraphAlg {
+//! Class to split variable vertices
+
+//! Where variable vertices have edges of different ranges, duplicate the
+//! vertex so that each vertex only has edges of a particular range. Set the
+//! range (LSB and width) of the vertex and remove it from the edge.
+
+//! Since we are adding vertices, we need to mark them, or iterators may never
+//! terminate, using vertex::user
+//!  - existing var vertices OLD_VAR_VERTEX
+//!  - new var vertices NEW_VAR_VERTEX
+class GraphSplitVars : GraphAlg {
 
 private:
-    //! Iterate all vertices which are VarRef nodes
-    void main () {
+    typedef pair<int, int> RangeType;	//!< LSB, width
+    typedef std::map<RangeType, BitsplitVarVertex *> VarVertexMapType;
+
+    // Enumeration for types of vertices.
+    enum vt {
+	OLD_VAR_VERTEX,		//!< Mark an existing vertex
+	NEW_VAR_VERTEX		//!< Mark a new vertex
+    };
+
+    //! Iterate all vertices which are variable nodes to split the
+    //! node. Because we are adding nodes, we need to distinguish between old
+    //! and new nodes when adding.
+    void main() {
+	// Mark all existing var vertices
 	for (V3GraphVertex* itp = m_graphp->verticesBeginp();
 	     itp;
 	     itp=itp->verticesNextp()) {
-	    // All VAR vertices are VarScopes. We need to look at the
-	    // connected logic to work out which bits are being used
-	    if (BitloopVarVertex *vp = dynamic_cast<BitloopVarVertex *>(itp)) {
-		iterateVarVertex (vp);
+	    if (BitsplitVarVertex *vvp = dynamic_cast<BitsplitVarVertex *>(itp)) {
+		vvp->user(OLD_VAR_VERTEX);
+	    }
+	}
+	// Iterate to split the "old" vertices. We use a while loop, because
+	// we need care at the end of each iteration to select the next
+	// iteration *before* deleting the old node.
+	V3GraphVertex* itp = m_graphp->verticesBeginp();
+	while (itp) {
+	    BitsplitVarVertex *vvp = dynamic_cast<BitsplitVarVertex *>(itp);
+	    if (vvp && (OLD_VAR_VERTEX == vvp->user())) {
+		// Select the next vertex now, since we'll delete the old
+		// vertex in iterateVarVertex.
+		itp=itp->verticesNextp();
+		iterateVarVertex(vvp);
+	    } else {
+		itp=itp->verticesNextp();
 	    }
 	}
     }
-    //! Find the logic connected to a var, and then all the driving/driven vars
-    void iterateVarVertex (BitloopVarVertex *vvertexp) {
-	string name = vvertexp->varScp()->varp()->prettyName();
-	UINFO(0, name << endl);
-	for (V3GraphEdge *edgep = vvertexp->inBeginp();
-	     edgep;
-	     edgep = edgep->inNextp()) {
-	    if (followEdge(edgep)) {
-		// Sources are logic driving this variable as l-value.
-		BitloopLogicVertex *lvertexp =
-		    dynamic_cast<BitloopLogicVertex *>(edgep->fromp());
-		iterateLogicFromVertex(lvertexp);
+    //! Split vertices for each edge
+
+    //! Iterate through all the edges, if an edge range does not match an
+    //! existing edge (in a map), then create a copy of the vertex with the
+    //! new range.
+
+    //! No one will use the vertex after this, so we are allowed to delete it.
+    void iterateVarVertex(BitsplitVarVertex *origVarVertexp) {
+	// We don't try to modify the existing vertex and edges, or we'll
+	// confuse the iteration. We just make copies as we need them, then
+	// delete the originals.
+	VarVertexMapType  vvmap;
+
+	// In edges
+	for (BitsplitEdge *origEdgep =
+		 dynamic_cast<BitsplitEdge *>(origVarVertexp->inBeginp());
+	     origEdgep;
+	     origEdgep = dynamic_cast<BitsplitEdge *>(origEdgep->inNextp())) {
+	    if (followEdge(origEdgep)) {
+		int lsb = origEdgep->lsb();
+		int width = origEdgep->width();
+		RangeType range(lsb, width);
+		BitsplitVarVertex *newVarVertexp;
+		if (vvmap.count(range)) {
+		    newVarVertexp = vvmap[range];
+		} else {
+		    newVarVertexp = new BitsplitVarVertex(m_graphp,
+							 origVarVertexp,
+							 lsb, width);
+		    newVarVertexp->user(NEW_VAR_VERTEX);
+		    vvmap[range] = newVarVertexp;
+		}
+		BitsplitLogicVertex *fromp =
+		    dynamic_cast<BitsplitLogicVertex *>(origEdgep->fromp());
+		new BitsplitEdge(m_graphp, fromp, newVarVertexp);
 	    }
 	}
-	for (V3GraphEdge *edgep = vvertexp->outBeginp();
-	     edgep;
-	     edgep = edgep->outNextp()) {
-	    if (followEdge(edgep)) {
-		// Sinks are logic driven by this variable as r-value.
-		BitloopLogicVertex *lvertexp =
-		    dynamic_cast<BitloopLogicVertex *>(edgep->top());
-		iterateLogicToVertex(lvertexp);
+	// Out edges
+	for (BitsplitEdge *origEdgep =
+		 dynamic_cast<BitsplitEdge *>(origVarVertexp->outBeginp());
+	     origEdgep;
+	     origEdgep = dynamic_cast<BitsplitEdge *>(origEdgep->outNextp())) {
+	    if (followEdge(origEdgep)) {
+		int lsb = origEdgep->lsb();
+		int width = origEdgep->width();
+		RangeType range(lsb, width);
+		BitsplitVarVertex *newVarVertexp;
+		if (vvmap.count(range)) {
+		    newVarVertexp = vvmap[range];
+		} else {
+		    newVarVertexp = new BitsplitVarVertex(m_graphp,
+							 origVarVertexp,
+							 lsb, width);
+		    newVarVertexp->user(NEW_VAR_VERTEX);
+		    vvmap[range] = newVarVertexp;
+		}
+		BitsplitLogicVertex *top =
+		    dynamic_cast<BitsplitLogicVertex *>(origEdgep->top());
+		new BitsplitEdge(m_graphp, newVarVertexp, top);
 	    }
 	}
-    }
-    //! Iterate the edges of a logic vertext to find driving vars
-    void iterateLogicFromVertex (BitloopLogicVertex *lvertexp) {
-	for (V3GraphEdge *edgep = lvertexp->inBeginp();
-	     edgep;
-	     edgep = edgep->inNextp()) {
-	    BitloopVarVertex *vvertexp =
-		dynamic_cast<BitloopVarVertex *>(edgep->fromp());
-	    string name = vvertexp->varScp()->varp()->prettyName();
-	    UINFO(0,("  <- ") << name << endl);
-	}
-    }
-    //! Iterate the edges of a logic vertext to find driven vars
-    void iterateLogicToVertex (BitloopLogicVertex *lvertexp) {
-	for (V3GraphEdge *edgep = lvertexp->outBeginp();
-	     edgep;
-	     edgep = edgep->outNextp()) {
-	    BitloopVarVertex *vvertexp =
-		dynamic_cast<BitloopVarVertex *>(edgep->top());
-	    string name = vvertexp->varScp()->varp()->prettyName();
-	    UINFO(0,("  -> ") << name << endl);
-	}
+	// Delete the old vertex
+	origVarVertexp->unlinkDelete(m_graphp);
     }
 	    
 
 public:
     //! Constructor
-    GraphReportOrigVars(V3Graph* graphp)
+    GraphSplitVars(V3Graph* graphp)
 	: GraphAlg(graphp, &V3GraphEdge::followAlwaysTrue) {
 	main();
     }
     //! Destructor (currently empty)
-    ~GraphReportOrigVars() {}
+    ~GraphSplitVars() {}
 };
 
 
-//! Class to strip out unneeded logic vertices.
+//! Class to strip out logic vertices.
 
-//! Logic nodes with no edges connecting them can be removed. Logic nodes
-//! connecting vars can be removed, with edges directly connecting the vars.
-
-//! The only logic nodes which remain are sinks and sources.
+//! This is the code from rerouteEdges() in V3Graph.cpp, but using
+//! BitsplitEdge for rerouting.
 class GraphStripLogic : GraphAlg {
 
 private:
-    //! Iterate all vertices which are logic nodes
-    void main () {
-	for (V3GraphVertex* itp = m_graphp->verticesBeginp();
-	     itp;
-	     itp=itp->verticesNextp()) {
-	    // All VAR vertices are VarScopes. We need to look at the
-	    // connected logic to work out which bits are being used
-	    if (BitloopVarVertex *lp =
-		dynamic_cast<BitloopVarVertex *>(itp)) {
-		iterateVarVertex (lp);
-	    }
+    //! Iterate all vertices which are logic nodes. We use a while loop, so we
+    //! can make sure we advance the iteration before deleting a node.
+    void main() {
+	V3GraphVertex* itp = m_graphp->verticesBeginp();
+	while (itp) {
+	    BitsplitLogicVertex *lp = dynamic_cast<BitsplitLogicVertex *>(itp);
+	    itp=itp->verticesNextp();
+	    if (lp) deleteLogicVertex(lp);
 	}
     }
-    //! Try to eliminate logic nodes
-    void iterateVarVertex (BitloopVarVertex *vvertexp) {
-	string name = vvertexp->varScp()->varp()->prettyName();
-	UINFO(0, name << endl);
-	for (V3GraphEdge *edgep = vvertexp->inBeginp();
-	     edgep;
-	     edgep = edgep->inNextp()) {
-	    if (followEdge(edgep)) {
-		// Sources are logic driving this variable as l-value.
-		BitloopLogicVertex *lvertexp =
-		    dynamic_cast<BitloopLogicVertex *>(edgep->fromp());
-		iterateLogicFromVertex(lvertexp);
+    //! Eliminate a logic node.
+
+    //!  Label the edge with the name of the logic node being eliminated. We
+    //!can safely delete it, since it is not used after this point.
+    void deleteLogicVertex(BitsplitLogicVertex *lvertexp) {
+	// Make new edges for each from/to pair
+	for (V3GraphEdge* iedgep = lvertexp->inBeginp();
+	     iedgep;
+	     iedgep=iedgep->inNextp()) {
+	    for (V3GraphEdge* oedgep = lvertexp->outBeginp();
+		 oedgep;
+		 oedgep=oedgep->outNextp()) {
+		BitsplitVarVertex *fromp =
+		    dynamic_cast<BitsplitVarVertex *>(iedgep->fromp());
+		BitsplitVarVertex *top =
+		    dynamic_cast<BitsplitVarVertex *>(oedgep->top());
+		if (fromp && top) {
+		    BitsplitEdge *edgep = new BitsplitEdge(m_graphp, fromp, top);
+		    edgep->dotLabel(lvertexp->name());
+		}
 	    }
 	}
-	for (V3GraphEdge *edgep = vvertexp->outBeginp();
-	     edgep;
-	     edgep = edgep->outNextp()) {
-	    if (followEdge(edgep)) {
-		// Sinks are logic driven by this variable as r-value.
-		BitloopLogicVertex *lvertexp =
-		    dynamic_cast<BitloopLogicVertex *>(edgep->top());
-		iterateLogicToVertex(lvertexp);
-	    }
-	}
-    }
-    //! Iterate the edges of a logic vertext to find driving vars
-    void iterateLogicFromVertex (BitloopLogicVertex *lvertexp) {
-	for (V3GraphEdge *edgep = lvertexp->inBeginp();
-	     edgep;
-	     edgep = edgep->inNextp()) {
-	    BitloopVarVertex *vvertexp =
-		dynamic_cast<BitloopVarVertex *>(edgep->fromp());
-	    string name = vvertexp->varScp()->varp()->prettyName();
-	    UINFO(0,("  <- ") << name << endl);
-	}
-    }
-    //! Iterate the edges of a logic vertext to find driven vars
-    void iterateLogicToVertex (BitloopLogicVertex *lvertexp) {
-	for (V3GraphEdge *edgep = lvertexp->outBeginp();
-	     edgep;
-	     edgep = edgep->outNextp()) {
-	    BitloopVarVertex *vvertexp =
-		dynamic_cast<BitloopVarVertex *>(edgep->top());
-	    string name = vvertexp->varScp()->varp()->prettyName();
-	    UINFO(0,("  -> ") << name << endl);
-	}
+	// Remove old vertex
+	lvertexp->unlinkDelete(m_graphp);
     }
 	    
 
@@ -324,21 +367,21 @@ public:
 
 
 // #############################################################################
-// Bitloop class functions
+// Bitsplit class functions
 
 //! Visitor to build graph of bit loops
-class BitloopVisitor : public AstNVisitor {
+class BitsplitVisitor : public AstNVisitor {
 private:
     // NODE STATE
     //Entire netlist:
-    // AstVarScope::user1p	-> BitloopVarVertex* for usage var, 0=not set yet
-    // {statement}Node::user1p	-> BitloopLogicVertex* for this statement
+    // AstVarScope::user1p	-> BitsplitVarVertex* for usage var, 0=not set yet
+    // {statement}Node::user1p	-> BitsplitLogicVertex* for this statement
 
     AstUser1InUse	m_inuser1;
 
     // STATE
     V3Graph		m_graph;	// Scoreboard of var usages/dependencies
-    BitloopLogicVertex*	m_logicVertexp;	// Current statement being tracked, NULL=ignored
+    BitsplitLogicVertex*	m_logicVertexp;	// Current statement being tracked, NULL=ignored
     AstScope*		m_scopep;	// Current scope being processed
     AstNodeModule*	m_modp;		// Current module
     AstActive*		m_activep;	// Current active
@@ -351,17 +394,17 @@ private:
 	if (m_scopep) {
 	    UINFO(4,"   STMT "<<nodep<<endl);
 	    // m_activep is null under AstCFunc's, that's ok.
-	    m_logicVertexp = new BitloopLogicVertex(&m_graph, m_scopep, nodep, m_activep);
+	    m_logicVertexp = new BitsplitLogicVertex(&m_graph, m_scopep, nodep, m_activep);
 	    nodep->iterateChildren(*this);
 	    m_logicVertexp = NULL;
 	}
     }
 
-    BitloopVarVertex* makeVarVertex(AstVarScope* varscp) {
-	BitloopVarVertex* vertexp = (BitloopVarVertex*)(varscp->user1p());
+    BitsplitVarVertex* makeVarVertex(AstVarScope* varscp) {
+	BitsplitVarVertex* vertexp = (BitsplitVarVertex*)(varscp->user1p());
 	if (!vertexp) {
 	    UINFO(6,"New vertex "<<varscp<<endl);
-	    vertexp = new BitloopVarVertex(&m_graph, m_scopep, varscp);
+	    vertexp = new BitsplitVarVertex(&m_graph, m_scopep, varscp);
 	    varscp->user1p(vertexp);
 	}
 	return vertexp;
@@ -370,10 +413,11 @@ private:
     // VISITORS
     virtual void visit(AstNetlist* nodep, AstNUser*) {
 	nodep->iterateChildren(*this);
-	GraphReportOrigVars alg (&m_graph);
-	m_graph.dumpDotFilePrefixed("bitloop_pre");
-	GraphStripLogic alg2 (&m_graph);
-	m_graph.dumpDotFilePrefixed("bitloop_split");
+	m_graph.dumpDotFilePrefixed("bitsplit_pre");
+	GraphSplitVars a1(&m_graph);
+	m_graph.dumpDotFilePrefixed("bitsplit_split");
+	GraphStripLogic a2(&m_graph);
+	m_graph.dumpDotFilePrefixed("bitsplit_stripped");
     }
     virtual void visit(AstNodeModule* nodep, AstNUser*) {
 	m_modp = nodep;
@@ -399,26 +443,26 @@ private:
 	    if (!m_logicVertexp) nodep->v3fatalSrc("Var ref not under a logic block\n");
 	    AstVarScope* varscp = nodep->varScopep();
 	    if (!varscp) nodep->v3fatalSrc("Var didn't get varscoped in V3Scope.cpp\n");
-	    BitloopVarVertex* vvertexp = makeVarVertex(varscp);
+	    BitsplitVarVertex* vvertexp = makeVarVertex(varscp);
 	    UINFO(5," VARREF to "<<varscp<<endl);
 	    if (m_inSenItem) vvertexp->setIsClock();
 	    // Width = 0 means we didn't see a SELECT, so use the natural
 	    // width and lsb of the Var's basic type
+	    int lsb   = m_lsb;		// What we will actually use
+	    int width = m_width;
 	    if (0 == m_width) {
 		AstBasicDType *basicTypep = nodep->dtypep()->basicp();
 		if (basicTypep->isRanged() && !basicTypep->rangep()) {
-		    m_lsb = basicTypep->lsb();
-		    m_width = basicTypep->msb() - m_lsb + 1;
+		    lsb = basicTypep->lsb();
+		    width = basicTypep->msb() - lsb + 1;
 		}
 	    }
 	    // We use weight of one; if we ref the var more than once, when we
 	    // simplify, the weight will increase
 	    if (nodep->lvalue()) {
-		new BitloopEdge(&m_graph, m_logicVertexp, vvertexp, 1, m_lsb,
-				m_width);
+		new BitsplitEdge(&m_graph, m_logicVertexp, vvertexp, lsb, width);
 	    } else {
-		new BitloopEdge(&m_graph, vvertexp, m_logicVertexp, 1, m_lsb,
-				m_width);
+		new BitsplitEdge(&m_graph, vvertexp, m_logicVertexp, lsb, width);
 	    }
 	}
     }
@@ -474,7 +518,6 @@ private:
 	int  old_width = m_width;
 	m_lsb = nodep->lsbConst();
 	m_width = nodep->widthConst();
-	UINFO(0, "Sel lsb: " << m_lsb << ", width: " << m_width << endl);
 	nodep->iterateChildren(*this);
 	m_lsb = old_lsb;
 	m_width = old_width;
@@ -488,7 +531,7 @@ private:
 
 public:
     // CONSTUCTORS
-    BitloopVisitor(AstNode* nodep) {
+    BitsplitVisitor(AstNode* nodep) {
 	m_logicVertexp = NULL;
 	m_scopep = NULL;
 	m_modp = NULL;
@@ -498,7 +541,7 @@ public:
 	m_width = 0;
 	nodep->accept(*this);
     }
-    virtual ~BitloopVisitor() {
+    virtual ~BitsplitVisitor() {
 	// Add stats here if needed
     }
     static int debug() {
@@ -513,8 +556,8 @@ public:
 
 // #############################################################################
 
-//! Bitloop static method for invoking graph analysys
-void V3Bitloop::bitloopAll(AstNetlist *nodep) {
+//! Bitsplit static method for invoking graph analysys
+void V3Bitsplit::bitsplitAll(AstNetlist *nodep) {
     UINFO(2,__FUNCTION__<<": "<<endl);
-    BitloopVisitor visitor (nodep);
+    BitsplitVisitor visitor(nodep);
 }
