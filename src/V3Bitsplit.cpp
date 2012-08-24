@@ -415,9 +415,8 @@ private:
 	nodep->iterateChildren(*this);
 	m_graph.dumpDotFilePrefixed("bitsplit_pre");
 	GraphSplitVars a1(&m_graph);
-	m_graph.dumpDotFilePrefixed("bitsplit_split");
 	GraphStripLogic a2(&m_graph);
-	m_graph.dumpDotFilePrefixed("bitsplit_stripped");
+	m_graph.dumpDotFilePrefixed("bitsplit_split");
     }
     virtual void visit(AstNodeModule* nodep, AstNUser*) {
 	m_modp = nodep;
