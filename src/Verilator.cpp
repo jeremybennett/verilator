@@ -28,7 +28,7 @@
 #include "V3Assert.h"
 #include "V3AssertPre.h"
 #include "V3Begin.h"
-#include "V3Bitloop.h"
+#include "V3Bitsplit.h"
 #include "V3Branch.h"
 #include "V3Case.h"
 #include "V3Cast.h"
@@ -395,7 +395,7 @@ void process () {
 	    v3info("Command Line disabled gate optimization with -Og/-O0.  This may cause ordering problems.");
 	}
 	// Find bit- and part-select loops
-        V3Bitloop::bitloopAll(v3Global.rootp());
+        V3Bitsplit::bitsplitAll(v3Global.rootp());
 	
 	// Combine COVERINCs with duplicate terms
 	if (v3Global.opt.coverage()) {
