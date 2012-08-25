@@ -397,6 +397,22 @@ you can install using cpan.
 
     cpan install Unix::Processors
 
+There are some traps to avoid when running regression tests
+
+=over 4
+
+=item *
+
+The regression tests will assume that you have a version of SystemPerl to
+match. Typically if you are working on Verilator from git, you should work on
+SystemPerl from git.
+
+=item *
+
+When checking the MANIFEST, the test will barf on unexpected code in the
+verilator tree. So make sure to keep any such code outside the tree.
+
+
 =head1 DEBUGGING
 
 =head2 --debug
