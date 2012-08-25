@@ -404,14 +404,34 @@ There are some traps to avoid when running regression tests
 =item *
 
 The regression tests will assume that you have a version of SystemPerl to
-match. Typically if you are working on Verilator from git, you should work on
-SystemPerl from git.
+match. Typically if working on Verilator from git, also use SystemPerl from
+git.
 
 =item *
 
 When checking the MANIFEST, the test will barf on unexpected code in the
 verilator tree. So make sure to keep any such code outside the tree.
 
+=item *
+
+Not all Linux systems install Perldoc by default. This is needed for the
+I<--help> option to verilator, but also for regression testing. This can be
+installed using cpan:
+
+    cpan install Pod::Perldoc
+
+Many Linux systems also offer a standard package for this. Red
+Hat/Fedora/Centos offer I<perl-Pod-Perldoc>, while Debian/Ubuntu/Linux Mint
+offer I<perl-doc>.
+
+=item *
+
+Running regression may exhaust resources on some Linux systems, particularly
+file handles and user processes. Increase these to respectively 16,384 and
+4,096. The method of doing this is system dependent, but on Fedora Linux it
+would require editing the C</etc/security/limits.conf> file as root.
+
+=back
 
 =head1 DEBUGGING
 
@@ -632,7 +652,7 @@ File a bug (if there isn't already) so others know what you're working on.
 
 =item 2.
 
-Make a testcase in the test_regress/t/t_EXAMPLE format, see L<"TESTING">.
+Make a testcase in the test_regress/t/t_EXAMPLE format, see L<TESTING>.
 
 =item 3.
 
@@ -663,8 +683,6 @@ in C<src/verilator.cpp>.
 
 To get your pass to build you'll need to add its binary filename to the list
 in C<src/Makefile_obj.in> and reconfigure.
-
-=back
 
 =head1 DISTRIBUTION
 
