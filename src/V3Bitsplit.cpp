@@ -74,22 +74,19 @@ public:
 //! vertex, rather than the edge.
 class BitsplitVarVertex : public BitsplitEitherVertex {
     AstVarScope* m_varScp;	//!< The AstVarScope associated with this vertex
-    bool	 m_isTop;	//!< TRUE if we are TOP scope
-    bool	 m_isClock;	//!< TRUE for clocked cars
     int		 m_lsb;		//!< LSB of range
     int          m_width;	//!< Width (0 if not set yet).
 public:
     //! Constructor based on a varScope
     BitsplitVarVertex(V3Graph* graphp, AstScope* scopep, AstVarScope* varScp,
 		     int lsb = 0, int width = 0)
-	: BitsplitEitherVertex(graphp, scopep), m_varScp(varScp)
-	, m_isTop(false), m_isClock(false), m_lsb(lsb), m_width(width) {}
+	: BitsplitEitherVertex(graphp, scopep), m_varScp(varScp), m_lsb(lsb)
+	, m_width(width) {}
     //! Constructor based on existing vertex
     BitsplitVarVertex(V3Graph* graphp, BitsplitVarVertex *vvp, int lsb = 0,
 		     int width = 0)
 	: BitsplitEitherVertex(graphp, vvp->scopep())
-	, m_varScp(vvp->varScp()), m_isTop(vvp->isTop())
-	, m_isClock(vvp->isClock()), m_lsb(lsb), m_width(width) {}
+	, m_varScp(vvp->varScp()), m_lsb(lsb), m_width(width) {}
     //! Destructor (currently empty)
     virtual ~BitsplitVarVertex() {}
     // Accessors
@@ -102,10 +99,6 @@ public:
 		+ m_varScp->fileline()->filebasename() + ":"
 		+ cvtToStr(m_varScp->fileline()->lineno()));
     }
-    bool isTop() const { return m_isTop; }
-    void setIsTop() { m_isTop = true; }
-    bool isClock() const { return m_isClock; }
-    void setIsClock() { m_isClock = true; }
     virtual string dotColor() const { return "blue"; }
 };
 
@@ -124,14 +117,10 @@ public:
 //! - AstAstTraceInc
 class BitsplitLogicVertex : public BitsplitEitherVertex {
     AstNode*	m_nodep;	//!< The logic node associated with this vertex
-    AstActive*	m_activep;	//!< Under what active; NULL is ok (under CFUNC
-				//!< or such)
 public:
     //! Constructor
-    BitsplitLogicVertex(V3Graph* graphp, AstScope* scopep, AstNode* nodep,
-		       AstActive* activep)
-	: BitsplitEitherVertex(graphp, scopep), m_nodep(nodep)
-	, m_activep(activep) {}
+    BitsplitLogicVertex(V3Graph* graphp, AstScope* scopep, AstNode* nodep)
+	: BitsplitEitherVertex(graphp, scopep), m_nodep(nodep) {}
     //! Destructor (currently empty)
     virtual ~BitsplitLogicVertex() {}
     // Accessors
@@ -142,7 +131,6 @@ public:
 		+ cvtToStr(m_nodep->fileline()->lineno()));
     }
     AstNode* nodep() const { return m_nodep; }
-    AstActive* activep() const { return m_activep; }
     virtual string dotColor() const { return "yellow"; }
 };
 
@@ -366,35 +354,88 @@ public:
 };
 
 
+//! Merge redundant edges
+
+//! A simplified version of GraphRemoveRedundant, but which also merges the
+//! edge labels.
+
+//! By this time the vertices are all variable vertices. userp is used to mark
+//! the vertices we have already found an edge to.
+class GraphMergeEdges : GraphAlg {
+
+private:
+    void main() {
+	for (V3GraphVertex* vertexp = m_graphp->verticesBeginp();
+	     vertexp;
+	     vertexp=vertexp->verticesNextp()) {
+	    vertexIterate(vertexp);
+	}
+    }
+    void vertexIterate(V3GraphVertex* vertexp) {
+	// Clear marks
+	for (V3GraphEdge* edgep = vertexp->outBeginp();
+	     edgep;
+	     edgep=edgep->outNextp()) {
+	    edgep->top()->userp(NULL);
+	}
+	// Mark edges and detect duplications
+	BitsplitEdge *edgep =
+	    dynamic_cast<BitsplitEdge *>(vertexp->outBeginp());
+
+	while (edgep) {
+	    BitsplitEdge *nextp =
+		dynamic_cast<BitsplitEdge *>(edgep->outNextp());
+	    if (followEdge(edgep)) {
+		V3GraphVertex *outVertexp = edgep->top();
+		BitsplitEdge *prevEdgep = (BitsplitEdge *)outVertexp->userp();
+		if (!prevEdgep) { // No previous assignment
+		    outVertexp->userp(edgep);
+		} else { // Duplicate. Merge labels and delete edge
+		    string label = edgep->dotLabel();
+		    string prevLabel = prevEdgep->dotLabel();
+		    if (label != prevLabel) {
+			prevEdgep->dotLabel(label + "\\n" + prevLabel);
+		    }
+		    edgep->unlinkDelete();
+		    edgep = NULL;
+		}
+		edgep = nextp;
+	    }
+	}
+    }
+public:
+    GraphMergeEdges(V3Graph* graphp)
+	: GraphAlg(graphp, &V3GraphEdge::followAlwaysTrue) {
+	main();
+    }
+    ~GraphMergeEdges() {}
+};
+
+
 // #############################################################################
 // Bitsplit class functions
 
 //! Visitor to build graph of bit loops
+
+//! Node state used as follows
+//! * AstVarScope::user1p -> BitsplitVarVertex* for usage var, 0=not set yet
 class BitsplitVisitor : public AstNVisitor {
 private:
-    // NODE STATE
-    //Entire netlist:
-    // AstVarScope::user1p	-> BitsplitVarVertex* for usage var, 0=not set yet
-    // {statement}Node::user1p	-> BitsplitLogicVertex* for this statement
-
     AstUser1InUse	m_inuser1;
 
     // STATE
-    V3Graph		m_graph;	// Scoreboard of var usages/dependencies
-    BitsplitLogicVertex*	m_logicVertexp;	// Current statement being tracked, NULL=ignored
-    AstScope*		m_scopep;	// Current scope being processed
-    AstNodeModule*	m_modp;		// Current module
-    AstActive*		m_activep;	// Current active
-    bool		m_inSenItem;	// Underneath AstSenItem; any varrefs are clocks
-    int                 m_lsb;		//!< LSB inside select
-    int                 m_width;	//!< Width inside select (0 if none)
+    V3Graph		 m_graph;	 //!< Graph of var usages/dependencies
+    BitsplitLogicVertex *m_logicVertexp; //!< Current statement being tracked,
+					 //!< NULL=ignored
+    AstScope		*m_scopep;	 //!< Current scope being processed
+    int                  m_lsb;		 //!< LSB inside select
+    int                  m_width;	 //!< Width inside select (0 if none)
 
     // METHODS
     void iterateNewStmt(AstNode* nodep) {
 	if (m_scopep) {
 	    UINFO(4,"   STMT "<<nodep<<endl);
-	    // m_activep is null under AstCFunc's, that's ok.
-	    m_logicVertexp = new BitsplitLogicVertex(&m_graph, m_scopep, nodep, m_activep);
+	    m_logicVertexp = new BitsplitLogicVertex(&m_graph, m_scopep, nodep);
 	    nodep->iterateChildren(*this);
 	    m_logicVertexp = NULL;
 	}
@@ -416,12 +457,11 @@ private:
 	m_graph.dumpDotFilePrefixed("bitsplit_pre");
 	GraphSplitVars a1(&m_graph);
 	GraphStripLogic a2(&m_graph);
+	GraphMergeEdges a3(&m_graph);
 	m_graph.dumpDotFilePrefixed("bitsplit_split");
     }
     virtual void visit(AstNodeModule* nodep, AstNUser*) {
-	m_modp = nodep;
 	nodep->iterateChildren(*this);
-	m_modp = NULL;
     }
     virtual void visit(AstScope* nodep, AstNUser*) {
 	UINFO(4," SCOPE "<<nodep<<endl);
@@ -433,9 +473,7 @@ private:
     virtual void visit(AstActive* nodep, AstNUser*) {
 	// Create required blocks and add to module
 	UINFO(4,"  BLOCK  "<<nodep<<endl);
-	m_activep = nodep;
 	nodep->iterateChildren(*this);
-	m_activep = NULL;
     }
     virtual void visit(AstNodeVarRef* nodep, AstNUser*) {
 	if (m_scopep) {
@@ -444,7 +482,6 @@ private:
 	    if (!varscp) nodep->v3fatalSrc("Var didn't get varscoped in V3Scope.cpp\n");
 	    BitsplitVarVertex* vvertexp = makeVarVertex(varscp);
 	    UINFO(5," VARREF to "<<varscp<<endl);
-	    if (m_inSenItem) vvertexp->setIsClock();
 	    // Width = 0 means we didn't see a SELECT, so use the natural
 	    // width and lsb of the Var's basic type
 	    int lsb   = m_lsb;		// What we will actually use
@@ -477,17 +514,14 @@ private:
     virtual void visit(AstSenItem* nodep, AstNUser*) {
 	// Note we look at only AstSenItems, not AstSenGate's
 	// The gating term of a AstSenGate is normal logic
-	m_inSenItem = true;
 	if (m_logicVertexp) {  // Already under logic; presumably a SenGate
 	    nodep->iterateChildren(*this);
 	} else {  // Standalone item, probably right under a SenTree
 	    iterateNewStmt(nodep);
 	}
-	m_inSenItem = false;
     }
+    //! AstSenItem The logic gating term is dealt with as logic
     virtual void visit(AstSenGate* nodep, AstNUser*) {
-	// First handle the clock part will be handled in a minute by visit
-	// AstSenItem The logic gating term is delt with as logic
 	iterateNewStmt(nodep);
     }
     virtual void visit(AstInitial* nodep, AstNUser*) {
@@ -513,33 +547,26 @@ private:
     }
     //! Record selector details for bit graph
     virtual void visit(AstSel *nodep, AstNUser*) {
-	int  old_lsb = m_lsb;
-	int  old_width = m_width;
+	int  oldLsb = m_lsb;
+	int  oldWidth = m_width;
 	m_lsb = nodep->lsbConst();
 	m_width = nodep->widthConst();
 	nodep->iterateChildren(*this);
-	m_lsb = old_lsb;
-	m_width = old_width;
+	m_lsb = oldLsb;
+	m_width = oldWidth;
     }
-
-    //--------------------
-    // Default
+    //! Default visitor
     virtual void visit(AstNode* nodep, AstNUser*) {
 	nodep->iterateChildren(*this);
     }
 
 public:
-    // CONSTUCTORS
-    BitsplitVisitor(AstNode* nodep) {
-	m_logicVertexp = NULL;
-	m_scopep = NULL;
-	m_modp = NULL;
-	m_activep = NULL;
-	m_inSenItem = false;
-	m_lsb = 0;
-	m_width = 0;
+    //! Constructor
+    BitsplitVisitor(AstNode* nodep)
+	: m_logicVertexp(NULL), m_scopep(NULL), m_lsb(0), m_width(0) {
 	nodep->accept(*this);
     }
+    //! Destructor
     virtual ~BitsplitVisitor() {
 	// Add stats here if needed
     }
