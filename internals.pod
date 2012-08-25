@@ -370,7 +370,32 @@ AST.
 To write a test see the BUGS section of the Verilator primary manual, and
 the documentation in:
 
-  test_regress/t/driver.pl --help  
+  test_regress/t/driver.pl --help
+
+Developers will also want to configure with two extra flags
+
+=over 4
+
+=item --enable-long-tests
+
+In addition to the standard C, SystemC and SystemPerl tests also run the tests
+in the C<test_vcs>, C<test_verilated> and C<test_regress> directories when
+using I<make test>.
+
+=item --enable-ccwarn
+
+Cause the build to stop on warnings as well as errors. A good way to ensure no
+sloppy code gets added.
+
+However it can be a pain in the neck when it comes to testing, since third
+party code used in the tests (e.g. SystemC) may not be warning free.
+
+=back
+
+When enabling the long tests, some additional PERL modules are needed, which
+you can install using cpan.
+
+    cpan install Unix::Processors
 
 =head1 DEBUGGING
 
@@ -470,7 +495,7 @@ Of the form C<< <ennnn> >> or C<< <ennnn#> >> , where C<nnnn> is the number
 of the last edit to modify this node. The trailing C<#> indicates the node
 has been edited since the last tree dump (which typically means in the last
 refinement or optimization pass). GDB can watch for this, see L</Debugging
-with GDB> below.
+with GDB>.
 
 =item Source file and line
 
@@ -591,7 +616,7 @@ File a bug (if there isn't already) so others know what you're working on.
 
 =item 2.
 
-Make a testcase in the test_regress/t/t_EXAMPLE format, see TESTING Below.
+Make a testcase in the test_regress/t/t_EXAMPLE format, see L<"TESTING">.
 
 =item 3.
 

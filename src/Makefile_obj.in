@@ -158,7 +158,7 @@ RAW_OBJS = \
 	V3Ast.o	\
 	V3AstNodes.o	\
 	V3Begin.o \
-	V3Bitloop.o \
+	V3Bitsplit.o \
 	V3Branch.o \
 	V3Broken.o \
 	V3Case.o \
