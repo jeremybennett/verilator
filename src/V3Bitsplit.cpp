@@ -549,8 +549,14 @@ private:
     virtual void visit(AstSel *nodep, AstNUser*) {
 	int  oldLsb = m_lsb;
 	int  oldWidth = m_width;
-	m_lsb = nodep->lsbConst();
-	m_width = nodep->widthConst();
+	// Range only meaningful if LSB and width are *both* constant
+	if (nodep->lsbp()->castConst() && nodep->widthp()->castConst()) {
+	    m_lsb = nodep->lsbConst();
+	    m_width = nodep->widthConst();
+	} else {
+	    m_lsb = 0;
+	    m_width = 0;
+	}
 	nodep->iterateChildren(*this);
 	m_lsb = oldLsb;
 	m_width = oldWidth;
