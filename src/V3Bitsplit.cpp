@@ -393,7 +393,7 @@ private:
 		} else { // Duplicate. Merge labels and delete edge
 		    string label = edgep->dotLabel();
 		    string prevLabel = prevEdgep->dotLabel();
-		    if (label != prevLabel) {
+		    if (prevLabel.find(label) == string::npos) {
 			prevEdgep->dotLabel(label + "\\n" + prevLabel);
 		    }
 		    edgep->unlinkDelete();
