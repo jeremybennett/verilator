@@ -7,12 +7,11 @@ if (!$::Driver) { use FindBin; exec("$FindBin::Bin/bootstrap.pl", @ARGV, $0); di
 # Lesser General Public License Version 3 or the Perl Artistic License
 # Version 2.0.
 
-compile (
-	 );
+$Self->{vlt} and $Self->unsupported("Verilator unsupported, bug517");
 
-execute (
-	 check_finished=>1,
-     );
+# Compile time only test
+compile (
+    );
 
 ok(1);
 1;

@@ -154,6 +154,7 @@ public:
 	    // See t_gen_forif.v for an example.
 	} else {
 	    preErrorDump();
+	    UINFO(4,"name "<<name<<endl);  // Not always same as nodep->name
 	    UINFO(4,"Var1 "<<nodep<<endl);
 	    UINFO(4,"Var2 "<<fnodep<<endl);
 	    if (nodep->type() == fnodep->type()) {
@@ -497,6 +498,7 @@ private:
 	AstBegin* oldbeginp = m_beginp;
 	VSymEnt* oldModSymp = m_modSymp;
 	VSymEnt* oldCurSymp = m_curSymp;
+	int oldParamNum = m_paramNum;
 	// Where do we add it?
 	VSymEnt* aboveSymp = m_curSymp;
 	string origname = AstNode::dedotName(nodep->name());
@@ -522,6 +524,7 @@ private:
 	m_beginp = oldbeginp;
 	m_modSymp = oldModSymp;
 	m_curSymp = oldCurSymp;
+	m_paramNum = oldParamNum;
     }
     virtual void visit(AstCellInline* nodep, AstNUser*) {
 	UINFO(5,"   CELLINLINE under "<<m_scope<<" is "<<nodep<<endl);
@@ -543,6 +546,10 @@ private:
 	} else {  // No __DOT__, just directly underneath
 	    m_statep->insertInline(aboveSymp, m_modSymp, nodep, nodep->name());
 	}
+    }
+    virtual void visit(AstDefParam* nodep, AstNUser*) {
+	nodep->user1p(m_curSymp);
+	nodep->iterateChildren(*this);
     }
     virtual void visit(AstGenerate* nodep, AstNUser*) {
 	// Begin: ... blocks often replicate under genif/genfor, so simply suppress duplicate checks
@@ -739,8 +746,7 @@ private:
 	    }
 	}
 	m_curSymp->import(srcp, nodep->name());
-	// No longer needed
-	nodep->unlinkFrBack()->deleteTree(); nodep=NULL;
+	// No longer needed, but can't delete until any multi-instantiated modules are expanded
     }
 
     virtual void visit(AstNode* nodep, AstNUser*) {
@@ -834,14 +840,15 @@ private:
     virtual void visit(AstDefParam* nodep, AstNUser*) {
 	nodep->iterateChildren(*this);
 	nodep->v3warn(DEFPARAM,"Suggest replace defparam with Verilog 2001 #(."<<nodep->name()<<"(...etc...))");
-	VSymEnt* foundp = m_statep->getNodeSym(m_modp)->findIdFallback(nodep->path());
+	VSymEnt* foundp = m_statep->getNodeSym(nodep)->findIdFallback(nodep->path());
 	AstCell* cellp = foundp->nodep()->castCell();
 	if (!cellp) {
 	    nodep->v3error("In defparam, cell "<<nodep->path()<<" never declared");
 	} else {
 	    AstNode* exprp = nodep->rhsp()->unlinkFrBack();
 	    UINFO(9,"Defparam cell "<<nodep->path()<<"."<<nodep->name()
-		  <<" <= "<<exprp<<endl);
+		  <<" attach-to "<<cellp
+		  <<"  <= "<<exprp<<endl);
 	    // Don't need to check the name of the defparam exists.  V3Param does.
 	    AstPin* pinp = new AstPin (nodep->fileline(),
 				       -1, // Pin# not relevant
@@ -1292,6 +1299,7 @@ private:
 				       <<"'"<<" as a "<<foundp->nodep()->typeName()
 				       <<" but expected a "<<expectWhat);
 		    } else if (m_dotText=="") {
+			UINFO(7,"   ErrParseRef curSymp=se"<<(void*)m_curSymp<<" dotSymp=se"<<(void*)m_dotSymp<<endl);
 			nodep->v3error("Can't find definition of "<<expectWhat
 				       <<": "<<nodep->prettyName());
 		    } else {
@@ -1440,7 +1448,9 @@ private:
 		nodep->packagep(foundp->packagep());
 		UINFO(7,"         Resolved "<<nodep<<endl);  // Also prints taskp
 	    } else {
+		// Note ParseRef has similar error handling/message output
 		m_statep->preErrorDump();
+		UINFO(7,"   ErrFtask curSymp=se"<<(void*)m_curSymp<<" dotSymp=se"<<(void*)dotSymp<<endl);
 		if (nodep->dotted() == "") {
 		    nodep->v3error("Can't find definition of task/function: "<<nodep->prettyName());
 		} else {
@@ -1521,6 +1531,10 @@ private:
 	    if (nodep->cname()!="") taskp->cname(nodep->cname());
 	}
 	nodep->unlinkFrBack()->deleteTree();
+    }
+    virtual void visit(AstPackageImport* nodep, AstNUser*) {
+	// No longer needed
+	nodep->unlinkFrBack()->deleteTree(); nodep=NULL;
     }
     virtual void visit(AstNode* nodep, AstNUser*) {
 	// Default: Just iterate
