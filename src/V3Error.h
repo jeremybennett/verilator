@@ -30,6 +30,8 @@
 #include <set>
 #include <deque>
 
+#include "V3LangCode.h"
+
 //######################################################################
 
 class V3ErrorCode {
@@ -295,7 +297,8 @@ class FileLine {
     int		m_lineno;
     int		m_filenameno;
     bitset<V3ErrorCode::_ENUM_MAX>	m_warnOn;
-    // Consider moving opt.language() into here, so can know language per-node
+    // Language per-node, moved from V3Options. Set by +<lang>ext+ options.
+    V3LangCode	m_language;		// language for this file
 
 private:
     struct EmptySecret {};
@@ -315,6 +318,7 @@ protected:
     friend class V3PreLex;
     friend class V3PreProcImp;
     void lineno(int num) { m_lineno = num; }
+    void language (V3LangCode lang) { m_language = lang; }
     void filename(const string& name) { m_filenameno = singleton().nameToNumber(name); }
     void lineDirective(const char* textp, int& enterExitRef);
     void linenoInc() { m_lineno++; }
@@ -337,6 +341,8 @@ public:
 #endif
 
     int lineno () const { return m_lineno; }
+    V3LangCode language () const { return m_language; }
+    void updateLanguage (string filename);
     string ascii() const;
     const string filename () const { return singleton().numberToName(m_filenameno); }
     const string filenameLetters() const { return singleton().filenameLetters(m_filenameno); }

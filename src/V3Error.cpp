@@ -170,6 +170,11 @@ FileLine* FileLine::copyOrSameFileLine() {
     return newp;
 }
 
+//! Update the language, based on the file name.
+void FileLine::updateLanguage (string filename) {
+    language(v3Global.opt.fileLanguage(filename));
+}
+
 const string FileLine::filebasename() const {
     string name = filename();
     string::size_type pos;
