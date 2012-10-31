@@ -208,6 +208,9 @@ class AstSenTree;
 %token<strp>		yaID__LEX	"IDENTIFIER-in-lex"
 %token<strp>		yaID__aPACKAGE	"PACKAGE-IDENTIFIER"
 %token<strp>		yaID__aTYPE	"TYPE-IDENTIFIER"
+//			Can't predecode aFUNCTION, can declare after use
+//			Can't predecode aINTERFACE, can declare after use
+//			Can't predecode aTASK, can declare after use
 
 // IEEE: integral_number
 %token<nump>		yaINTNUM	"INTEGER NUMBER"
@@ -631,6 +634,7 @@ descriptionList:		// IEEE: part of source_text
 
 description:			// ==IEEE: description
 		module_declaration			{ }
+	//			// udp_declaration moved into module_declaration
 	//UNSUP	interface_declaration			{ }
 	|	program_declaration			{ }
 	|	package_declaration			{ }
@@ -644,6 +648,7 @@ description:			// ==IEEE: description
 
 timeunits_declaration<nodep>:	// ==IEEE: timeunits_declaration
 		yTIMEUNIT       yaTIMENUM ';'		{ $$ = NULL; }
+	|	yTIMEUNIT yaTIMENUM '/' yaTIMENUM ';'	{ $$ = NULL; }
 	| 	yTIMEPRECISION  yaTIMENUM ';'		{ $$ = NULL; }
 	;
 
@@ -681,6 +686,7 @@ package_itemList<nodep>:	// IEEE: { package_item }
 package_item<nodep>:		// ==IEEE: package_item
 		package_or_generate_item_declaration	{ $$ = $1; }
 	//UNSUP	anonymous_program			{ $$ = $1; }
+	//UNSUP	package_export_declaration		{ $$ = $1; }
 	|	timeunits_declaration			{ $$ = $1; }
 	;
 
@@ -689,15 +695,16 @@ package_or_generate_item_declaration<nodep>:	// ==IEEE: package_or_generate_item
 	|	data_declaration			{ $$ = $1; }
 	|	task_declaration			{ $$ = $1; }
 	|	function_declaration			{ $$ = $1; }
+	//UNSUP	checker_declaration			{ $$ = $1; }
 	|	dpi_import_export			{ $$ = $1; }
 	//UNSUP	extern_constraint_declaration		{ $$ = $1; }
 	//UNSUP	class_declaration			{ $$ = $1; }
 	//			// class_constructor_declaration is part of function_declaration
+	|	local_parameter_declaration ';'		{ $$ = $1; }
 	|	parameter_declaration ';'		{ $$ = $1; }
-	|	local_parameter_declaration		{ $$ = $1; }
 	//UNSUP	covergroup_declaration			{ $$ = $1; }
 	//UNSUP	overload_declaration			{ $$ = $1; }
-	//UNSUP	concurrent_assertion_item_declaration	{ $$ = $1; }
+	//UNSUP	assertion_item_declaration		{ $$ = $1; }
 	|	';'					{ $$ = NULL; }
 	;
 
@@ -822,13 +829,17 @@ port<nodep>:			// ==IEEE: port
 	//			// IEEE: interface_port_header port_identifier { unpacked_dimension }
 	//			// Expanded interface_port_header
 	//			// We use instantCb here because the non-port form looks just like a module instantiation
-	//UNSUP	portDirNetE id/*interface*/                      idAny/*port*/ rangeListE sigAttrListE	{ VARDTYPE($2); VARDONEA($<fl>3, $3, $4); PARSEP->instantCb($<fl>2, $2, $3, $4); PINNUMINC(); }
-	//UNSUP	portDirNetE yINTERFACE                           idAny/*port*/ rangeListE sigAttrListE	{ VARDTYPE($2); VARDONEA($<fl>3, $3, $4); PINNUMINC(); }
-	//UNSUP	portDirNetE id/*interface*/ '.' idAny/*modport*/ idAny/*port*/ rangeListE sigAttrListE	{ VARDTYPE($2); VARDONEA($<fl>5, $5, $6); PARSEP->instantCb($<fl>2, $2, $5, $6); PINNUMINC(); }
-	//UNSUP	portDirNetE yINTERFACE      '.' idAny/*modport*/ idAny/*port*/ rangeListE sigAttrListE	{ VARDTYPE($2); VARDONEA($<fl>5, $5, $6); PINNUMINC(); }
+	//UNSUP	portDirNetE id/*interface*/                      idAny/*port*/ rangeListE sigAttrListE
+	//UNSUP		{ VARDTYPE($2); VARDONEA($<fl>3, $3, $4); PARSEP->instantCb($<fl>2, $2, $3, $4); PINNUMINC(); }
+	//UNSUP	portDirNetE yINTERFACE                           idAny/*port*/ rangeListE sigAttrListE
+	//UNSUP		{ VARDTYPE($2); VARDONEA($<fl>3, $3, $4); PINNUMINC(); }
+	//UNSUP	portDirNetE id/*interface*/ '.' idAny/*modport*/ idAny/*port*/ rangeListE sigAttrListE
+	//UNSUP		{ VARDTYPE($2); VARDONEA($<fl>5, $5, $6); PARSEP->instantCb($<fl>2, $2, $5, $6); PINNUMINC(); }
+	//UNSUP	portDirNetE yINTERFACE      '.' idAny/*modport*/ idAny/*port*/ rangeListE sigAttrListE
+	//UNSUP		{ VARDTYPE($2); VARDONEA($<fl>5, $5, $6); PINNUMINC(); }
 	//
 	//			// IEEE: ansi_port_declaration, with [port_direction] removed
-	//			//   IEEE: [ net_port_header | interface_port_header ] port_identifier { unpacked_dimension }
+	//			//   IEEE: [ net_port_header | interface_port_header ] port_identifier { unpacked_dimension } [ '=' constant_expression ]
 	//			//   IEEE: [ net_port_header | variable_port_header ] '.' port_identifier '(' [ expression ] ')'
 	//			//   IEEE: [ variable_port_header ] port_identifier { variable_dimension } [ '=' constant_expression ]
 	//			//   Substitute net_port_header = [ port_direction ] net_port_type
@@ -852,11 +863,16 @@ port<nodep>:			// ==IEEE: port
 	//
 	//			// Note implicit rules looks just line declaring additional followon port
 	//			// No VARDECL("port") for implicit, as we don't want to declare variables for them
-	//UNSUP	portDirNetE data_type	       '.' portSig '(' portAssignExprE ')' sigAttrListE	{ UNSUP }
-	//UNSUP	portDirNetE yVAR data_type     '.' portSig '(' portAssignExprE ')' sigAttrListE	{ UNSUP }
-	//UNSUP	portDirNetE yVAR implicit_type '.' portSig '(' portAssignExprE ')' sigAttrListE	{ UNSUP }
-	//UNSUP	portDirNetE signingE rangeList '.' portSig '(' portAssignExprE ')' sigAttrListE	{ UNSUP }
-	//UNSUP	portDirNetE /*implicit*/       '.' portSig '(' portAssignExprE ')' sigAttrListE	{ UNSUP }
+	//UNSUP	portDirNetE data_type	       '.' portSig '(' portAssignExprE ')' sigAttrListE
+	//UNSUP		{ UNSUP }
+	//UNSUP	portDirNetE yVAR data_type     '.' portSig '(' portAssignExprE ')' sigAttrListE
+	//UNSUP		{ UNSUP }
+	//UNSUP	portDirNetE yVAR implicit_type '.' portSig '(' portAssignExprE ')' sigAttrListE
+	//UNSUP		{ UNSUP }
+	//UNSUP	portDirNetE signingE rangeList '.' portSig '(' portAssignExprE ')' sigAttrListE
+	//UNSUP		{ UNSUP }
+	//UNSUP	portDirNetE /*implicit*/       '.' portSig '(' portAssignExprE ')' sigAttrListE
+	//UNSUP		{ UNSUP }
 	//
 		portDirNetE data_type           portSig variable_dimensionListE sigAttrListE
 			{ $$=$3; VARDTYPE($2); $$->addNextNull(VARDONEP($$,$4,$5)); }
@@ -955,6 +971,7 @@ program_generate_item<nodep>:		// ==IEEE: program_generate_item
 		loop_generate_construct			{ $$ = $1; }
 	|	conditional_generate_construct		{ $$ = $1; }
 	|	generate_region				{ $$ = $1; }
+	//UNSUP	elaboration_system_task			{ $$ = $1; }
 	;
 
 //************************************************
@@ -977,7 +994,7 @@ genvar_identifierDecl<varp>:		// IEEE: genvar_identifier (for declaration)
 
 local_parameter_declaration<nodep>:	// IEEE: local_parameter_declaration
 	//			// See notes in parameter_declaration
-		local_parameter_declarationFront list_of_param_assignments ';'	{ $$ = $2; }
+		local_parameter_declarationFront list_of_param_assignments	{ $$ = $2; }
 	;
 
 parameter_declaration<nodep>:	// IEEE: parameter_declaration
@@ -1471,7 +1488,7 @@ non_port_module_item<nodep>:	// ==IEEE: non_port_module_item
 	|	yaSCDTOR				{ $$ = new AstScDtor($<fl>1,*$1); }
 	|	yVL_INLINE_MODULE			{ $$ = new AstPragma($1,AstPragmaType::INLINE_MODULE); }
 	|	yVL_NO_INLINE_MODULE			{ $$ = new AstPragma($1,AstPragmaType::NO_INLINE_MODULE); }
-	|	yVL_PUBLIC_MODULE			{ $$ = new AstPragma($1,AstPragmaType::PUBLIC_MODULE); }
+	|	yVL_PUBLIC_MODULE			{ $$ = new AstPragma($1,AstPragmaType::PUBLIC_MODULE); v3Global.dpi(true); }
 	;
 
 module_or_generate_item<nodep>:	// ==IEEE: module_or_generate_item
@@ -1480,7 +1497,8 @@ module_or_generate_item<nodep>:	// ==IEEE: module_or_generate_item
 	//			// IEEE: gate_instantiation + udp_instantiation + module_instantiation
 	//			// not here, see etcInst in module_common_item
 	//			// We joined udp & module definitions, so this goes here
-	|	table					{ $$ = $1; }
+	|	combinational_body			{ $$ = $1; }
+	//			// This module_common_item shared with interface_or_generate_item:module_common_item
 	|	module_common_item			{ $$ = $1; }
 	;
 
@@ -1530,6 +1548,11 @@ module_or_generate_item_declaration<nodep>:	// ==IEEE: module_or_generate_item_d
 
 //************************************************
 // Generates
+//
+// Way down in generate_item is speced a difference between module,
+// interface and checker generates.  modules and interfaces are almost
+// identical (minus DEFPARAMs) so we overlap them.  Checkers are too
+// different, so we copy all rules for checkers.
 
 generate_region<nodep>:		// ==IEEE: generate_region
 		yGENERATE genItemList yENDGENERATE	{ $$ = new AstGenerate($1, $2); }
@@ -1554,13 +1577,13 @@ genItemBegin<nodep>:		// IEEE: part of generate_block
 	;
 
 genItemOrBegin<nodep>:		// Not in IEEE, but our begin isn't under generate_item
-		generate_item				{ $$ = $1; }
-	|	genItemBegin				{ $$ = $1; }
+		~c~generate_item			{ $$ = $1; }
+	|	~c~genItemBegin				{ $$ = $1; }
 	;
 
 genItemList<nodep>:
-		genItemOrBegin				{ $$ = $1; }
-	|	genItemList genItemOrBegin		{ $$ = $1->addNextNull($2); }
+		~c~genItemOrBegin			{ $$ = $1; }
+	|	~c~genItemList ~c~genItemOrBegin	{ $$ = $1->addNextNull($2); }
 	;
 
 generate_item<nodep>:		// IEEE: module_or_interface_or_generate_item
@@ -1568,16 +1591,19 @@ generate_item<nodep>:		// IEEE: module_or_interface_or_generate_item
 		module_or_generate_item			{ $$ = $1; }
 	//			// Only legal when in a generate under an interface
 	//UNSUP	interface_or_generate_item		{ $$ = $1; }
+	//			// IEEE: checker_or_generate_item
+	//			// Only legal when in a generate under a checker
+	//			// so below in c_generate_item
 	;
 
 conditional_generate_construct<nodep>:	// ==IEEE: conditional_generate_construct
-		yCASE  '(' expr ')' case_generate_itemListE yENDCASE	{ $$ = new AstGenCase($1,$3,$5); }
+		yCASE  '(' expr ')' ~c~case_generate_itemListE yENDCASE	{ $$ = new AstGenCase($1,$3,$5); }
 	|	yIF '(' expr ')' generate_block_or_null	%prec prLOWER_THAN_ELSE	{ $$ = new AstGenIf($1,$3,$5,NULL); }
 	|	yIF '(' expr ')' generate_block_or_null yELSE generate_block_or_null	{ $$ = new AstGenIf($1,$3,$5,$7); }
 	;
 
 loop_generate_construct<nodep>:	// ==IEEE: loop_generate_construct
-		yFOR '(' genvar_initialization ';' expr ';' genvar_iteration ')' generate_block_or_null
+		yFOR '(' genvar_initialization ';' expr ';' genvar_iteration ')' ~c~generate_block_or_null
 			{ // Convert BEGIN(...) to BEGIN(GENFOR(...)), as we need the BEGIN to hide the local genvar
 			  AstBegin* lowerBegp = $9->castBegin();
 			  if ($9 && !lowerBegp) $9->v3fatalSrc("Child of GENFOR should have been begin");
@@ -1633,8 +1659,8 @@ case_generate_itemListE<nodep>:	// IEEE: [{ case_generate_itemList }]
 	;
 
 case_generate_itemList<nodep>:	// IEEE: { case_generate_itemList }
-		case_generate_item			{ $$=$1; }
-	|	case_generate_itemList case_generate_item	{ $$=$1; $1->addNext($2); }
+		~c~case_generate_item			{ $$=$1; }
+	|	~c~case_generate_itemList ~c~case_generate_item	{ $$=$1; $1->addNext($2); }
 	;
 
 case_generate_item<nodep>:	// ==IEEE: case_generate_item
@@ -1719,11 +1745,11 @@ sigAttrList<nodep>:
 sigAttr<nodep>:
 		yVL_CLOCK				{ $$ = new AstAttrOf($1,AstAttrType::VAR_CLOCK); }
 	|	yVL_CLOCK_ENABLE			{ $$ = new AstAttrOf($1,AstAttrType::VAR_CLOCK_ENABLE); }
-	|	yVL_PUBLIC				{ $$ = new AstAttrOf($1,AstAttrType::VAR_PUBLIC); }
-	|	yVL_PUBLIC_FLAT				{ $$ = new AstAttrOf($1,AstAttrType::VAR_PUBLIC_FLAT); }
-	|	yVL_PUBLIC_FLAT_RD			{ $$ = new AstAttrOf($1,AstAttrType::VAR_PUBLIC_FLAT_RD); }
-	|	yVL_PUBLIC_FLAT_RW			{ $$ = new AstAttrOf($1,AstAttrType::VAR_PUBLIC_FLAT_RW); }
-	|	yVL_PUBLIC_FLAT_RW attr_event_control	{ $$ = new AstAttrOf($1,AstAttrType::VAR_PUBLIC_FLAT_RW);
+	|	yVL_PUBLIC				{ $$ = new AstAttrOf($1,AstAttrType::VAR_PUBLIC); v3Global.dpi(true); }
+	|	yVL_PUBLIC_FLAT				{ $$ = new AstAttrOf($1,AstAttrType::VAR_PUBLIC_FLAT); v3Global.dpi(true); }
+	|	yVL_PUBLIC_FLAT_RD			{ $$ = new AstAttrOf($1,AstAttrType::VAR_PUBLIC_FLAT_RD); v3Global.dpi(true); }
+	|	yVL_PUBLIC_FLAT_RW			{ $$ = new AstAttrOf($1,AstAttrType::VAR_PUBLIC_FLAT_RW); v3Global.dpi(true); }
+	|	yVL_PUBLIC_FLAT_RW attr_event_control	{ $$ = new AstAttrOf($1,AstAttrType::VAR_PUBLIC_FLAT_RW); v3Global.dpi(true); 
 							  $$ = $$->addNext(new AstAlwaysPublic($1,$2,NULL)); }
 	|	yVL_ISOLATE_ASSIGNMENTS			{ $$ = new AstAttrOf($1,AstAttrType::VAR_ISOLATE_ASSIGNMENTS); }
 	|	yVL_SC_BV				{ $$ = new AstAttrOf($1,AstAttrType::VAR_SC_BV); }
@@ -1806,6 +1832,7 @@ defparam_assignment<nodep>:	// ==IEEE: defparam_assignment
 //   gate (strong0) [#(delay)]   [name] (pins) [, (pins)...] ;	// gate_instantiation
 //   program_id     [#(params}]   name ;			// program_instantiation
 //   interface_id   [#(params}]   name ;			// interface_instantiation
+//   checker_id			  name  (pins) ;		// checker_instantiation
 
 etcInst<nodep>:			// IEEE: module_instantiation + gate_instantiation + udp_instantiation
 		instDecl				{ $$ = $1; }
@@ -1940,7 +1967,7 @@ stmtBlock<nodep>:		// IEEE: statement + seq_block + par_block
 
 seq_block<nodep>:		// ==IEEE: seq_block
 	//			// IEEE doesn't allow declarations in unnamed blocks, but several simulators do.
-	//			// So need begin's even if unnamed to scope variables down
+	//			// So need AstBegin's even if unnamed to scope variables down
 		seq_blockFront blockDeclStmtList yEND endLabelE	{ $$=$1; $1->addStmtsp($2); SYMP->popScope($1); GRAMMARP->endLabel($<fl>4,$1,$4); }
 	|	seq_blockFront /**/		 yEND endLabelE	{ $$=$1; SYMP->popScope($1); GRAMMARP->endLabel($<fl>3,$1,$3); }
 	;
@@ -1964,9 +1991,10 @@ block_item_declarationList<nodep>:	// IEEE: [ block_item_declaration ]
 
 block_item_declaration<nodep>:	// ==IEEE: block_item_declaration
 		data_declaration 			{ $$ = $1; }
-	|	local_parameter_declaration 		{ $$ = $1; }
+	|	local_parameter_declaration ';'		{ $$ = $1; }
 	|	parameter_declaration ';' 		{ $$ = $1; }
 	//UNSUP	overload_declaration 			{ $$ = $1; }
+	//UNSUP	let_declaration 			{ $$ = $1; }
 	;
 
 stmtList<nodep>:
@@ -1988,6 +2016,8 @@ statement_item<nodep>:		// IEEE: statement_item
 		foperator_assignment ';'		{ $$ = $1; }
 	//
 	//		 	// IEEE: blocking_assignment
+	//			// 1800-2009 restricts LHS of assignment to new to not have a range
+	//			// This is ignored to avoid conflicts
 	//UNSUP	fexprLvalue '=' class_new ';'		{ UNSUP }
 	//UNSUP	fexprLvalue '=' dynamic_array_new ';'	{ UNSUP }
 	//
@@ -2058,6 +2088,7 @@ statement_item<nodep>:		// IEEE: statement_item
 	|	yFOR '(' for_initialization expr ';' for_stepE ')' stmtBlock
 							{ $$ = new AstBegin($1,"",$3); $3->addNext(new AstWhile($1, $4,$8,$6)); }
 	|	yDO stmtBlock yWHILE '(' expr ')' ';'	{ $$ = $2->cloneTree(true); $$->addNext(new AstWhile($1,$5,$2));}
+	//			// IEEE says array_identifier here, but dotted accepted in VMM and 1800-2009
 	//UNSUP	yFOREACH '(' idClassForeach/*array_id[loop_variables]*/ ')' stmt	{ UNSUP }
 	//
 	//			// IEEE: jump_statement
@@ -2286,6 +2317,14 @@ taskRef<parserefp>:		// IEEE: part of tf_call
 	;
 
 funcRef<parserefp>:		// IEEE: part of tf_call
+	//			// package_scope/hierarchical_... is part of expr, so just need ID
+	//			//	making-a		id-is-a
+	//			//	-----------------	------------------
+	//			//      tf_call			tf_identifier		expr (list_of_arguments)
+	//			//      method_call(post .)	function_identifier	expr (list_of_arguments)
+	//			//	property_instance	property_identifier	property_actual_arg
+	//			//	sequence_instance	sequence_identifier	sequence_actual_arg
+	//			//      let_expression		let_identifier		let_actual_arg
 		idDotted '(' list_of_argumentsE ')'	{ $$ = new AstParseRef($1->fileline(), AstParseRefExp::PX_FTASK, "", $1, new AstFuncRef($2, "", $3)); $$->start(true); }
 	|	package_scopeIdFollows idDotted '(' list_of_argumentsE ')'	{ AstFuncRef* f=new AstFuncRef($3,"",$4); f->packagep($1); $$ = new AstParseRef($2->fileline(), AstParseRefExp::PX_FTASK, "", $2, f); $$->start(true); }
 	//UNSUP: idDotted is really just id to allow dotted method calls
@@ -2501,7 +2540,7 @@ tf_item_declaration<nodep>:	// ==IEEE: tf_item_declaration
 	;
 
 tf_item_declarationVerilator<nodep>:	// Verilator extensions
-		yVL_PUBLIC				{ $$ = new AstPragma($1,AstPragmaType::PUBLIC_TASK); }
+		yVL_PUBLIC				{ $$ = new AstPragma($1,AstPragmaType::PUBLIC_TASK); v3Global.dpi(true); }
 	|	yVL_NO_INLINE_TASK			{ $$ = new AstPragma($1,AstPragmaType::NO_INLINE_TASK); }
 	;
 
@@ -2709,6 +2748,9 @@ expr<nodep>:			// IEEE: part of expression/constant_expression/primary
 	//			// method_call:array_method requires a '.'
 	//UNSUP	~l~expr '.' array_methodNoRoot		{ UNSUP }
 	//
+	//			// IEEE: let_expression
+	//			// see funcRef
+	//
 	//			// IEEE: '(' mintypmax_expression ')'
 	|	~noPar__IGNORE~'(' expr ')'		{ $$ = $2; }
 	//UNSUP	~noPar__IGNORE~'(' expr ':' expr ':' expr ')'	{ $$ = $4; }
@@ -2766,7 +2808,7 @@ exprOkLvalue<nodep>:		// expression that's also OK to use as a variable_lvalue
 	//			// IEEE: concatenation/constant_concatenation
 	|	'{' cateList '}'			{ $$ = $2; }
 	//			// IEEE: assignment_pattern_expression
-	//			// IEEE: [ assignment_pattern_expression_type ] == [ ps_type_id /ps_paremeter_id]
+	//			// IEEE: [ assignment_pattern_expression_type ] == [ ps_type_id /ps_paremeter_id/data_type]
 	//			// We allow more here than the spec requires
 	//UNSUP	~l~exprScope assignment_pattern		{ UNSUP }
 	//UNSUP	data_type assignment_pattern		{ UNSUP }
@@ -2778,6 +2820,7 @@ exprOkLvalue<nodep>:		// expression that's also OK to use as a variable_lvalue
 exprScope<nodep>:		// scope and variable for use to inside an expression
 	// 			// Here we've split method_call_root | implicit_class_handle | class_scope | package_scope
 	//			// from the object being called and let expr's "." deal with resolving it.
+	//			// (note method_call_root was simplified to require a primary in 1800-2009)
 	//
 	//			// IEEE: [ implicit_class_handle . | class_scope | package_scope ] hierarchical_identifier select
 	//			// Or method_call_body without parenthesis
@@ -3033,7 +3076,7 @@ strengthSpecE:			// IEEE: drive_strength + pullup_strength + pulldown_strength +
 //************************************************
 // Tables
 
-table<nodep>:		// IEEE: combinational_body + sequential_body
+combinational_body<nodep>:	// IEEE: combinational_body + sequential_body
 		yTABLE tableEntryList yENDTABLE		{ $$ = new AstUdpTable($1,$2); }
 	;
 
@@ -3131,6 +3174,7 @@ idClassSel<parserefp>:			// Misc Ref to dotted, and/or arrayed, and/or bit-range
 	//UNSUP	ySUPER '.' idDotted			{ UNSUP }
 	//UNSUP	yTHIS '.' ySUPER '.' idDotted		{ UNSUP }
 	//			// Expanded: package_scope idDotted
+	//UNSUP	class_scopeIdFollows idDotted		{ UNSUP }
 	//UNSUP	package_scopeIdFollows idDotted		{ UNSUP }
 	;
 
@@ -3206,6 +3250,8 @@ labeledStmt<nodep>:
 concurrent_assertion_item<nodep>:	// IEEE: concurrent_assertion_item
 		concurrent_assertion_statement		{ $$ = $1; }
 	|	id/*block_identifier*/ ':' concurrent_assertion_statement	{ $$ = new AstBegin($2,*$1,$3); }
+	//			// IEEE: checker_instantiation
+	//			// identical to module_instantiation; see etcInst
 	;
 
 concurrent_assertion_statement<nodep>:	// ==IEEE: concurrent_assertion_statement
@@ -3252,12 +3298,15 @@ ps_type<dtypep>:		// IEEE: ps_parameter_identifier | ps_type_identifier
 				// Even though we looked up the type and have a AstNode* to it,
 				// we can't fully resolve it because it may have been just a forward definition.
 		package_scopeIdFollowsE yaID__aTYPE	{ $$ = new AstRefDType($<fl>2, *$2); $$->castRefDType()->packagep($1); }
+	//			// Simplify typing - from ps_covergroup_identifier
+	//UNSUP	package_scopeIdFollowsE yaID__aCOVERGROUP	{ $<fl>$=$<fl>1; $$=$1+$2; }
 	;
 
 //=== Below rules assume special scoping per above
 
 package_scopeIdFollowsE<packagep>:	// IEEE: [package_scope]
 	//			// IMPORTANT: The lexer will parse the following ID to be in the found package
+	//			// class_qualifier := [ yLOCAL '::'  ] [ implicit_class_handle '.'  class_scope ]
 		/* empty */				{ $$ = NULL; }
 	|	package_scopeIdFollows			{ $$ = $1; }
 	;
@@ -3269,6 +3318,8 @@ package_scopeIdFollows<packagep>:	// IEEE: package_scope
 	/*cont*/	yP_COLONCOLON	{ $$ = GRAMMARP->unitPackage($<fl>1); }
 	|	yaID__aPACKAGE { SYMP->nextId($<scp>1); }
 	/*cont*/	yP_COLONCOLON	{ $$ = $<scp>1->castPackage(); }
+	//UNSUP	yLOCAL__COLONCOLON { PARSEP->symTableNextId($<scp>1); }
+	//UNSUP	/*cont*/	yP_COLONCOLON	{ UNSUP }
 	;
 
 //************************************************
