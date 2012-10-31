@@ -803,7 +803,8 @@ void V3Options::parseOptsList(FileLine* fl, const string& optdir, int argc, char
 		shift;
 		addLdLibs(argv[i]);
 	    }
-	    else if ( !strcmp (sw, "-language") && (i+1)<argc ) {
+	    else if ( (!strcmp (sw, "-language") && (i+1)<argc)
+		      || (!strcmp (sw, "-default-language") && (i+1)<argc)) {
 		shift;
 		V3LangCode optval = V3LangCode(argv[i]);
 		if (optval.legal()) {
