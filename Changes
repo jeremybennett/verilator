@@ -5,13 +5,27 @@ indicates the contributor was also the author of the fix; Thanks!
 
 * Verilator 3.84** devel
 
+****  Fix svdpi compile issue on MSVCC, bug571.  [Amir Gonnen]
+
+
+
+* Verilator 3.842 2012/11/03
+
+****  Add -x-initial-edge, bug570.  [Jeremy Bennett]
+
 ****  Fix parameter pins interspersed with cells broke in 3.840.  [Bernard Deadman]
 
 ****  Fix large shift error on large shift constants.  [David Welch]
 
-****  Fix $display mangling on GCC 4.7, msg927. [R Diez]
+****  Fix $display mangling on GCC 4.7 and speed up, msg927, bug373, bug574. [R Diez]
+
+****  Fix array of struct references giving false error, bug566. [Julius Baxter]
 
 ****  Fix missing var access functions when no DPI, bug572. [Amir Gonnen]
+
+****  Fix name collision on unnamed blocks, bug567.  [Chandan Egbert]
+
+****  Fix name collision on task inputs, bug569.  [Chandan Egbert]
 
 
 * Verilator 3.841 2012/09/03
