@@ -451,6 +451,9 @@ private:
 	string oldscope = m_scope;
 	VSymEnt* oldModSymp = m_modSymp;
 	VSymEnt* oldCurSymp = m_curSymp;
+        int      oldParamNum    = m_paramNum;
+        int      oldBeginNum    = m_beginNum;
+        int      oldModBeginNum = m_modBeginNum;
 	if (doit) {
 	    UINFO(2,"     Link Module: "<<nodep<<endl);
 	    if (nodep->dead()) nodep->v3fatalSrc("Module in cell tree mislabeled as dead?");
@@ -482,6 +485,9 @@ private:
 	m_scope = oldscope;
 	m_modSymp = oldModSymp;
 	m_curSymp = oldCurSymp;
+        m_paramNum    = oldParamNum;
+        m_beginNum    = oldBeginNum;
+        m_modBeginNum = oldModBeginNum;
 	// Prep for next
 	m_packagep = NULL;
     }
@@ -1013,7 +1019,7 @@ private:
     AstCell*		m_cellp;	// Current cell
     AstNodeModule*	m_modp;		// Current module
     AstNodeFTask* 	m_ftaskp;	// Current function/task
-    AstDot*		m_dotp;		// Current dot 
+    AstDot*		m_dotp;		// Current dot
     DotPosition		m_dotPos;	// Scope part of dotted resolution
     bool		m_dotErr;	// Error found in dotted resolution, ignore upwards
     string		m_dotText;	// String of dotted names found in below parseref
@@ -1246,6 +1252,7 @@ private:
 		    if (m_dotText!="") m_dotText += ".";
 		    m_dotText += nodep->name();
 		    m_dotSymp = foundp;
+		    m_dotPos = DP_SCOPE;
 		    // Upper AstDot visitor will handle it from here
 		}
 	    }
@@ -1359,6 +1366,7 @@ private:
 	    VSymEnt* okSymp;
 	    VSymEnt* dotSymp = m_curSymp;  // Start search at current scope
 	    if (nodep->inlinedDots()!="") {  // Correct for current scope
+		dotSymp = m_modSymp; // Dotted lookup is always relative to module, as maybe variable name lower down with same scope name we want to ignore (t_math_divw)
 		string inl = AstNode::dedotName(nodep->inlinedDots());
 		dotSymp = m_statep->findDotted(dotSymp, inl, baddot, okSymp);
 		if (!dotSymp) {
@@ -1464,8 +1472,8 @@ private:
     }
     virtual void visit(AstSelBit* nodep, AstNUser*) {
 	if (nodep->user3SetOnce()) return;
+	nodep->lhsp()->iterateAndNext(*this);
 	if (m_dotPos == DP_SCOPE) { // Already under dot, so this is {modulepart} DOT {modulepart}
-	    nodep->lhsp()->iterateAndNext(*this);
 	    if (AstConst* constp = nodep->rhsp()->castConst()) {
 		string index = AstNode::encodeNumber(constp->toSInt());
 		m_dotText += "__BRA__"+index+"__KET__";
@@ -1473,9 +1481,9 @@ private:
 		nodep->v3error("Unsupported: Non-constant inside []'s in the cell part of a dotted reference");
 	    }
 	    // And pass up m_dotText
-	} else {
-	    nodep->iterateChildren(*this);
 	}
+	nodep->fromp()->iterateAndNext(*this);
+	nodep->bitp()->iterateAndNext(*this);
     }
     virtual void visit(AstBegin* nodep, AstNUser*) {
 	UINFO(5,"   "<<nodep<<endl);
