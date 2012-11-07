@@ -408,6 +408,11 @@ These flags are only recommended for legacy mixed language designs, as the
 preferable option is to edit the code to repair new keywords, or add
 appropriate C<`begin_keywords>.
 
+B<Note.> C<`begin_keywords> is a SystemVerilog construct, which specifies
+I<only> which the set of keywords is to be recognized. Whatever set is chosen,
+the semantics will be those of SystemVerilog. By contrast C<+1364-1995ext+>
+etc specify both the syntax I<and> semantics to be used.
+
 =item --assert
 
 Enable all assertions, includes enabling the --psl flag.  (If psl is not
