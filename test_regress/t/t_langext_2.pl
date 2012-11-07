@@ -9,7 +9,7 @@ if (!$::Driver) { use FindBin; exec("$FindBin::Bin/bootstrap.pl", @ARGV, $0); di
 
 # This is a compile only test.
 compile (
-    v_flags2 => ["+verilog2001ext+v"],
+    v_flags2 => ["+systemverilogext+v"],
     );
 
 ok(1);

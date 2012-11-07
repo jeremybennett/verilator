@@ -7,9 +7,12 @@ if (!$::Driver) { use FindBin; exec("$FindBin::Bin/bootstrap.pl", @ARGV, $0); di
 # Lesser General Public License Version 3 or the Perl Artistic License
 # Version 2.0.
 
+top_filename("t/t_langext_2.v");
+
 # This is a compile only test.
 compile (
-    v_flags2 => ["+verilog2001ext+v"],
+    v_flags2 => ["+1364-1995ext+v"],
+    fails => 1
     );
 
 ok(1);
