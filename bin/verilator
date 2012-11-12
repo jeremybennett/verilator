@@ -285,7 +285,7 @@ descriptions in the next sections for more information.
     --inline-mult <value>       Tune module inlining
      -LDFLAGS <flags>           Linker pre-object flags for makefile
      -LDLIBS <flags>            Linker library flags for makefile
-    --language <lang>           Default language standard to parse (deprecated)
+    --language <lang>           Default language standard to parse
      +libext+<ext>+[ext]...     Extensions for finding modules
     --lint-only                 Lint, but do not make output
     --MMD                       Create .d dependency files
@@ -721,8 +721,8 @@ in the Make variable LDLIBS, not LDFLAGS.)
 
 =item --language I<value>
 
-This option is now deprecated and is retained only for backwards compatibility
-with earlier versions of Verilator. It is replaced by the
+This option is provided for compatibility with other tools and earlier
+versions of Verilator. It provides the same functionality as the
 C<--default-langauge> option.
 
 =item +libext+I<ext>+I<ext>...
