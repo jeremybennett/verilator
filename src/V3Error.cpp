@@ -180,8 +180,8 @@ FileLine* FileLine::copyOrSameFileLine() {
 }
 
 //! Update the language, based on the file name.
-void FileLine::updateLanguage (string filename) {
-    language(v3Global.opt.fileLanguage(filename));
+void FileLine::updateLanguage () {
+     language(v3Global.opt.fileLanguage(filename()));
 }
 
 const string FileLine::filebasename() const {

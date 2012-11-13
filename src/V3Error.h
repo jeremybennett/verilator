@@ -352,7 +352,7 @@ public:
 
     int lineno () const { return m_lineno; }
     V3LangCode language () const { return singleton().numberToLang(m_filenameno); }
-    void updateLanguage (string filename);
+    void updateLanguage ();
     string ascii() const;
     const string filename () const { return singleton().numberToName(m_filenameno); }
     const string filenameLetters() const { return singleton().filenameLetters(m_filenameno); }
