@@ -103,8 +103,9 @@ void V3ParseImp::parseFile(FileLine* fileline, const string& modfilename, bool i
 	// from the V3LangCode to the various Lex BEGIN states. The language
 	// of this source file is updated here, in case there have been any
 	// intervening +<lang>ext+ options since it was first ecountered.
-	fileline->updateLanguage(modfilename);
-	ppPushText((string)"`begin_keywords \""+fileline->language().ascii()+"\"\n");
+	FileLine *modfileline = new FileLine (modfilename, 0);
+	modfileline->updateLanguage();
+	ppPushText((string)"`begin_keywords \""+modfileline->language().ascii()+"\"\n");
     }
 
     // Preprocess into m_ppBuffer
