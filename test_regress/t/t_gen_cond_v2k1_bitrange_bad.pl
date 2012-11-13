@@ -7,12 +7,12 @@ if (!$::Driver) { use FindBin; exec("$FindBin::Bin/bootstrap.pl", @ARGV, $0); di
 # Lesser General Public License Version 3 or the Perl Artistic License
 # Version 2.0.
 
-compile (
-    verilator_flags2 => ["--language 1364-2001"],
-    );
+top_filename("t/t_gen_cond_v2k1_bitrange.v");
 
-execute (
-    check_finished=>1,
+# This is a compile only test.
+compile (
+    verilator_flags2 => ["--language 1800-2005"],
+    fails => 1
     );
 
 ok(1);

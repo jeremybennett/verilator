@@ -3,6 +3,10 @@
 // The given generate loops should only access valid bits of mask, since that
 // is defined by SIZE. However since the loop range is larger, this only works
 // if short-circuited evaluation of the generate loop is in place.
+//
+// This test is only valid for Verilog, not SystemVerilog, since it uses
+// short-circuting of bitwise AND and bitwise OR, which is described in the
+// Verilog standard, but explicitly forbidden in the SystemVerilog standard.
 
 // This file ONLY is placed into the Public Domain, for any use, without
 // warranty, 2012 by Jeremy Bennett.

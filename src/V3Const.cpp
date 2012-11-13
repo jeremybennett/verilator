@@ -209,6 +209,12 @@ private:
 	else nodep->rhsp(cp);
 	return true;
     }
+    static bool isVerilog(AstNode *nodep) {
+	V3LangCode  l = nodep->fileline()->language();
+	return ((V3LangCode::L1364_1995 == l)
+		|| (V3LangCode::L1364_2001 == l)
+		|| (V3LangCode::L1364_2005 == l));
+    }
     static bool operandShiftSame(AstNode* nodep) {
 	AstNodeBiop* np = nodep->castNodeBiop();
 	{
@@ -1735,6 +1741,10 @@ private:
     TREEOP ("AstMulS  {$lhsp.isZero, $rhsp}",	"replaceZeroChkPure(nodep,$rhsp)");
     TREEOP ("AstPow   {$lhsp.isZero, $rhsp}",	"replaceZeroChkPure(nodep,$rhsp)");
     TREEOP ("AstPowS  {$lhsp.isZero, $rhsp}",	"replaceZeroChkPure(nodep,$rhsp)");
+    // This visit function allows for short-circuiting of bitwise OR, but only
+    // if using Verilog, not SystemVerilog (which explicitly does not permit
+    // it).
+    TREEOPS("AstOr    {isVerilog(nodep), $lhsp.isAllOnes}", "replaceAllOnes(nodep)");
     TREEOP ("AstOr    {$lhsp.isZero, $rhsp}",	"replaceWRhs(nodep)");
     TREEOP ("AstShiftL{$lhsp.isZero, $rhsp}",	"replaceZeroChkPure(nodep,$rhsp)");
     TREEOP ("AstShiftR{$lhsp.isZero, $rhsp}",	"replaceZeroChkPure(nodep,$rhsp)");
@@ -1743,6 +1753,10 @@ private:
     TREEOP ("AstXnor  {$lhsp.isZero, $rhsp}",	"AstNot{$rhsp}");
     TREEOP ("AstSub   {$lhsp.isZero, $rhsp}",	"AstNegate{$rhsp}");
     TREEOP ("AstAdd   {$lhsp, $rhsp.isZero}",	"replaceWLhs(nodep)");
+    // This visit function allows for short-circuiting of bitwise AND, but only
+    // if using Verilog, not SystemVerilog (which explicitly does not permit
+    // it).
+    TREEOPS("AstAnd   {isVerilog(nodep), $lhsp.isZero}", "replaceZero(nodep)");
     TREEOP ("AstAnd   {$lhsp, $rhsp.isZero}",	"replaceZeroChkPure(nodep,$lhsp)");
     TREEOP ("AstLogAnd{$lhsp, $rhsp.isZero}",	"replaceZeroChkPure(nodep,$lhsp)");
     TREEOP ("AstLogOr {$lhsp, $rhsp.isZero}",	"replaceWLhs(nodep)");
