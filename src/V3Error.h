@@ -284,7 +284,7 @@ class FileLineSingleton {
     // MEMBERS
     FileNameNumMap	m_namemap;	// filenameno for each filename
     deque<string>	m_names;	// filename text for each filenameno
-    deque<V3LangCode>   m_languages;	// language for each filenameno
+    deque<V3LangCode>	m_languages;	// language for each filenameno
     // COSNTRUCTORS
     FileLineSingleton() { }
     ~FileLineSingleton() { }

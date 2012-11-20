@@ -104,7 +104,9 @@ int FileLineSingleton::nameToNumber(const string& filename) {
 void FileLineSingleton::fileNameNumMapDumpXml(ostream& os) {
     os<<"<files>\n";
     for (FileNameNumMap::const_iterator it = m_namemap.begin(); it != m_namemap.end(); ++it) {
-	os<<"<file id=\""<<filenameLetters(it->second)<<"\" filename=\""<<it->first<<"\" language=\""<<numberToLang(it->second).ascii()<<"\"/>\n";
+	os<<"<file id=\""<<filenameLetters(it->second)
+	  <<"\" filename=\""<<it->first
+	  <<"\" language=\""<<numberToLang(it->second).ascii()<<"\"/>\n";
     }
     os<<"</files>\n";
 }
@@ -179,7 +181,6 @@ FileLine* FileLine::copyOrSameFileLine() {
     return newp;
 }
 
-//! Update the language, based on the file name.
 void FileLine::updateLanguage () {
      language(v3Global.opt.fileLanguage(filename()));
 }

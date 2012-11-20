@@ -158,7 +158,7 @@ class V3Options {
     bool onoff(const char* sw, const char* arg, bool& flag);
     bool suffixed(const char* sw, const char* arg);
     string parseFileArg(const string& optdir, const string& relfilename);
-    bool parseLangExt (char *sw, const char *langsw, const V3LangCode lc);
+    bool parseLangExt(const char* swp, const char* langswp, const V3LangCode lc);
     string filePathCheckOneDir(const string& modname, const string& dirname);
 
     static string getenvStr(const string& envvar, const string& defaultValue);

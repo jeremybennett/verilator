@@ -62,7 +62,7 @@ public:
     enum en m_e;
     inline V3LangCode () : m_e(L_ERROR) {}
     inline V3LangCode (en _e) : m_e(_e) {}
-    V3LangCode (const char* textp);	// Return matching code or ERROR
+    V3LangCode (const char* textp);
     explicit inline V3LangCode (int _e) : m_e(static_cast<en>(_e)) {}
     operator en () const { return m_e; }
 };

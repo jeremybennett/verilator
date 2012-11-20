@@ -374,30 +374,16 @@ with the --exe option.
 
 =item +1800-2009ext+I<ext>
 
-Specifies the language standard to be used with a specific filename extension,
-I<ext>.
+Specifies the language standard to be used with a specific filename
+extension, I<ext>.
 
-For compatibility with other simulators, the following synonyms are provided:
+For compatibility with other simulators, see also the synonyms
+C<+verilog1995ext+>I<ext>, C<+verilog2001ext+>I<ext>, and
+C<+systemverilogext+>I<ext>.
 
-=over 4
-
-=item * 
-
-C<+verilog1995ext+>I<ext> as a synonym for C<+1364-1995ext+>I<ext>,
-
-=item *
-
-C<+verilog2001ext+>I<ext> as a synonym for C<+1364-2001ext+>I<ext>
-
-=item *
-
-C<+systemverilogext+>I<ext> as a synonym for C<+1800-2009ext+>I<ext>.
-
-=back
-
-For any source file, the language specified by these options takes precedence
-over any language specified by the C<--default-language> or C<--language>
-options.
+For any source file, the language specified by these options takes
+precedence over any language specified by the C<--default-language> or
+C<--language> options.
 
 These options take effect in the order they are encountered. Thus the
 following would use Verilog 1995 for C<a.v> and Verilog 2001 for C<b.v>.
@@ -408,10 +394,10 @@ These flags are only recommended for legacy mixed language designs, as the
 preferable option is to edit the code to repair new keywords, or add
 appropriate C<`begin_keywords>.
 
-B<Note.> C<`begin_keywords> is a SystemVerilog construct, which specifies
-I<only> which the set of keywords is to be recognized. Whatever set is chosen,
-the semantics will be those of SystemVerilog. By contrast C<+1364-1995ext+>
-etc specify both the syntax I<and> semantics to be used.
+B<Note> C<`begin_keywords> is a SystemVerilog construct, which specifies
+I<only> which the set of keywords is to be recognized. Whatever set is
+chosen, the semantics will be those of SystemVerilog. By contrast
+C<+1364-1995ext+> etc. specify both the syntax I<and> semantics to be used.
 
 =item --assert
 
@@ -596,21 +582,22 @@ C<--debug> is equivalent to C<--debugi 4>).
 
 =item --default-language I<value>
 
-Select the language to be used by default when first processing each Verilog
-file.  The language value must be "1364-1995", "1364-2001", "1364-2005",
-"1800-2005" or "1800-2009".
+Select the language to be used by default when first processing each
+Verilog file.  The language value must be "1364-1995", "1364-2001",
+"1364-2005", "1800-2005" or "1800-2009".
 
 Any language associated with a particular file extension (see the various
-+I<lang>ext+ options) will be used in preference to the language specified by
---default-language.
++I<lang>ext+ options) will be used in preference to the language specified
+by --default-language.
 
-The --default-language flag is only recommended for legacy code using the same
-language in all source files, as the preferable option is to edit the code to
-repair new keywords, or add appropriate C<`begin_keywords>. For legacy mixed
-language designs, the various +I<lang>ext+ options should be used.
+The --default-language flag is only recommended for legacy code using the
+same language in all source files, as the preferable option is to edit the
+code to repair new keywords, or add appropriate C<`begin_keywords>. For
+legacy mixed language designs, the various +I<lang>ext+ options should be
+used.
 
-If no language is specified, either by this flag or +I<lang>ext+ options, then
-the latest SystemVerilog language (IEEE 1800-2009) is used.
+If no language is specified, either by this flag or +I<lang>ext+ options,
+then the latest SystemVerilog language (IEEE 1800-2009) is used.
 
 =item +define+I<var>+I<value>
 
@@ -721,9 +708,8 @@ in the Make variable LDLIBS, not LDFLAGS.)
 
 =item --language I<value>
 
-This option is provided for compatibility with other tools and earlier
-versions of Verilator. It provides the same functionality as the
-C<--default-langauge> option.
+A synonym for C<--default-langauge>, for compatibility with other tools and
+earlier versions of Verilator.
 
 =item +libext+I<ext>+I<ext>...
 

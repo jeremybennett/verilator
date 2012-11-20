@@ -168,6 +168,20 @@ string V3Options::allArgsString() {
 }
 
 //######################################################################
+// V3LangCode class functions
+
+V3LangCode::V3LangCode (const char* textp) {
+    // Return code for given string, or ERROR, which is a bad code
+    for (int codei=V3LangCode::L_ERROR; codei<V3LangCode::_ENUM_END; ++codei) {
+	V3LangCode code = (V3LangCode)codei;
+	if (0==strcasecmp(textp,code.ascii())) {
+	    m_e = code; return;
+	}
+    }
+    m_e = V3LangCode::L_ERROR;
+}
+
+//######################################################################
 // File searching
 
 string V3Options::filenameFromDirBase (const string& dir, const string& basename) {
@@ -1101,16 +1115,16 @@ string V3Options::parseFileArg(const string& optdir, const string& relfilename) 
 //======================================================================
 
 //! Utility to see if we have a language extension argument and if so add it.
-bool V3Options::parseLangExt (char            *sw,     //!< argument text
-			      const char      *langsw, //!< option to match
-			      const V3LangCode lc)     //!< language code
-{
-    int  len = strlen (langsw);
-    if (!strncmp(sw, langsw, len)) {
-	addLangExt(sw + len, lc);
+bool V3Options::parseLangExt (const char* swp, //!< argument text
+			      const char* langswp, //!< option to match
+			      const V3LangCode lc) { //!< language code
+    int len = strlen(langswp);
+    if (!strncmp(swp, langswp, len)) {
+	addLangExt(swp + len, lc);
 	return true;
-    } else
+    } else {
 	return false;
+    }
 }
 
 //======================================================================
