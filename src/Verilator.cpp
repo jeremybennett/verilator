@@ -6,7 +6,7 @@
 //
 //*************************************************************************
 //
-// Copyright 2003-2012 by Wilson Snyder.  This program is free software; you can
+// Copyright 2003-2013 by Wilson Snyder.  This program is free software; you can
 // redistribute it and/or modify it under the terms of either the GNU
 // Lesser General Public License Version 3 or the Perl Artistic License
 // Version 2.0.
@@ -315,6 +315,11 @@ void process () {
 	v3Global.checkTree();
 	V3Global::dumpGlobalTree("const.tree");
 
+	// Convert case statements to if() blocks.  Must be after V3Unknown
+	// Must be before V3Task so don't need to deal with task in case value compares
+	V3Case::caseAll(v3Global.rootp());
+	V3Global::dumpGlobalTree("case.tree");
+
 	// Inline all tasks
 	V3Task::taskAll(v3Global.rootp());
 	V3Global::dumpGlobalTree("task.tree");
@@ -331,10 +336,6 @@ void process () {
 	// Expand slices of arrays
 	V3Slice::sliceAll(v3Global.rootp());
 	V3Global::dumpGlobalTree("slices.tree");
-
-	// Convert case statements to if() blocks.  Must be after V3Unknown
-	V3Case::caseAll(v3Global.rootp());
-	V3Global::dumpGlobalTree("case.tree");
 
 	// Push constants across variables and remove redundant assignments
 	V3Const::constifyAll(v3Global.rootp());

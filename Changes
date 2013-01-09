@@ -7,13 +7,17 @@ indicates the contributor was also the author of the fix; Thanks!
 
 ***   Support "unsigned int" DPI import functions, msg966.  [Alex Lee]
 
+***   Fix package resolution of parameters, bug586. [Jeremy Bennett]
+
 ****  Fix non-integer vpi_get_value, bug587.  [Rich Porter]
 
-****  Fix task inlining under $display, bug589.  [Holger Waechtler]
+****  Fix task inlining under $display and case, bug589, bug598.  [Holger Waechtler]
 
 ****  Fix package import of non-localparam parameter, bug591.  [Jeremy Bennett]
 
 ****  Fix package import of package imports, partial bug592.  [Jeremy Bennett]
+
+****  Fix package import preventing local var, bug599.  [Jeremy Bennett]
 
 
 * Verilator 3.843 2012/12/01
@@ -2145,7 +2149,7 @@ of input ports exists for tracing.
 
 This uses outline mode in Emacs.  See C-h m [M-x describe-mode].
 
-Copyright 2001-2012 by Wilson Snyder.  This program is free software; you
+Copyright 2001-2013 by Wilson Snyder.  This program is free software; you
 can redistribute it and/or modify it under the terms of either the GNU
 Lesser General Public License Version 3 or the Perl Artistic License
 Version 2.0.
