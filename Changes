@@ -3,7 +3,7 @@ Revision history for Verilator
 The contributors that suggested a given feature are shown in [].  [by ...]
 indicates the contributor was also the author of the fix; Thanks!
 
-* Verilator 3.84***
+* Verilator 3.844 2013/01/09
 
 ***   Support "unsigned int" DPI import functions, msg966.  [Alex Lee]
 
@@ -18,6 +18,8 @@ indicates the contributor was also the author of the fix; Thanks!
 ****  Fix package import of package imports, partial bug592.  [Jeremy Bennett]
 
 ****  Fix package import preventing local var, bug599.  [Jeremy Bennett]
+
+****  Fix array extraction of implicit vars, bug601.  [Joe Eiler]
 
 
 * Verilator 3.843 2012/12/01
