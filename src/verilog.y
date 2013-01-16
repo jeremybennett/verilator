@@ -282,6 +282,7 @@ class AstSenTree;
 %token<fl>		yASSIGN		"assign"
 %token<fl>		yAUTOMATIC	"automatic"
 %token<fl>		yBEGIN		"begin"
+%token<fl>		yBIND		"bind"
 %token<fl>		yBIT		"bit"
 %token<fl>		yBREAK		"break"
 %token<fl>		yBUF		"buf"
@@ -887,7 +888,7 @@ port<nodep>:			// ==IEEE: port
 	|	portDirNetE yVAR implicit_typeE portSig variable_dimensionListE sigAttrListE
 			{ $$=$4; VARDTYPE($3); $$->addNextNull(VARDONEP($$,$5,$6)); }
 	|	portDirNetE signingE rangeList  portSig variable_dimensionListE sigAttrListE
-			{ $$=$4; VARDTYPE(GRAMMARP->addRange(new AstBasicDType($3->fileline(), LOGIC_IMPLICIT, $2), $3,false)); $$->addNextNull(VARDONEP($$,$5,$6)); }
+			{ $$=$4; VARDTYPE(GRAMMARP->addRange(new AstBasicDType($3->fileline(), LOGIC_IMPLICIT, $2), $3,true)); $$->addNextNull(VARDONEP($$,$5,$6)); }
 	|	portDirNetE /*implicit*/        portSig variable_dimensionListE sigAttrListE
 			{ $$=$2; /*VARDTYPE-same*/ $$->addNextNull(VARDONEP($$,$3,$4)); }
 	//
@@ -1097,7 +1098,7 @@ port_declaration<nodep>:	// ==IEEE: port_declaration
 			list_of_variable_decl_assignments			{ $$ = $6; }
 	|	port_directionReset port_declNetE yVAR implicit_typeE { VARDTYPE($4); }
 			list_of_variable_decl_assignments			{ $$ = $6; }
-	|	port_directionReset port_declNetE signingE rangeList { VARDTYPE(GRAMMARP->addRange(new AstBasicDType($4->fileline(), LOGIC_IMPLICIT, $3),$4,false)); }
+	|	port_directionReset port_declNetE signingE rangeList { VARDTYPE(GRAMMARP->addRange(new AstBasicDType($4->fileline(), LOGIC_IMPLICIT, $3),$4,true)); }
 			list_of_variable_decl_assignments			{ $$ = $6; }
 	|	port_directionReset port_declNetE signing	     { VARDTYPE(new AstBasicDType($<fl>3, LOGIC_IMPLICIT, $3)); }
 			list_of_variable_decl_assignments			{ $$ = $5; }
@@ -1197,7 +1198,7 @@ data_typeBasic<dtypep>:		// IEEE: part of data_type
 data_typeNoRef<dtypep>:		// ==IEEE: data_type, excluding class_type etc references
 		data_typeBasic				{ $$ = $1; }
 	|	struct_unionDecl packed_dimensionListE	{ $$ = GRAMMARP->createArray(new AstDefImplicitDType($1->fileline(),"__typeimpsu"+cvtToStr(GRAMMARP->m_modTypeImpNum++),
-													     GRAMMARP->m_modp,VFlagChildDType(),$1),$2,false); }
+													     GRAMMARP->m_modp,VFlagChildDType(),$1),$2,true); }
 	|	enumDecl				{ $$ = new AstDefImplicitDType($1->fileline(),"__typeimpenum"+cvtToStr(GRAMMARP->m_modTypeImpNum++),
 										       GRAMMARP->m_modp,VFlagChildDType(),$1); }
 	|	ySTRING					{ $$ = new AstBasicDType($1,AstBasicDTypeKwd::STRING); }
@@ -1362,14 +1363,15 @@ enum_base_typeE<dtypep>:	// IEEE: enum_base_type
 		/* empty */				{ $$ = new AstBasicDType(CRELINE(),AstBasicDTypeKwd::INT); }
 	//			// Not in spec, but obviously "enum [1:0]" should work
 	//			// implicit_type expanded, without empty
-	|	signingE rangeList			{ $$ = GRAMMARP->addRange(new AstBasicDType($2->fileline(), LOGIC_IMPLICIT, $1),$2,false); }
+	//			// Note enum base types are always packed data types
+	|	signingE rangeList			{ $$ = GRAMMARP->addRange(new AstBasicDType($2->fileline(), LOGIC_IMPLICIT, $1),$2,true); }
 	|	signing					{ $$ = new AstBasicDType($<fl>1, LOGIC_IMPLICIT, $1); }
 	//
 	|	integer_atom_type signingE		{ $1->setSignedState($2); $$ = $1; }
-	|	integer_vector_type signingE rangeListE	{ $1->setSignedState($2); $$ = GRAMMARP->addRange($1,$3,false); }
+	|	integer_vector_type signingE rangeListE	{ $1->setSignedState($2); $$ = GRAMMARP->addRange($1,$3,true); }
 	//			// below can be idAny or yaID__aTYPE
 	//			// IEEE requires a type, though no shift conflict if idAny
-	|	idAny rangeListE			{ $$ = GRAMMARP->createArray(new AstRefDType($<fl>1, *$1), $2, false); }
+	|	idAny rangeListE			{ $$ = GRAMMARP->createArray(new AstRefDType($<fl>1, *$1), $2, true); }
 	;
 
 enum_nameList<nodep>:
@@ -1419,12 +1421,12 @@ data_declarationVarFront:	// IEEE: part of data_declaration
 	//			// implicit_type expanded into /*empty*/ or "signingE rangeList"
 		/**/ 	    yVAR lifetimeE data_type	{ VARRESET_NONLIST(VAR); VARDTYPE($3); }
 	|	/**/ 	    yVAR lifetimeE		{ VARRESET_NONLIST(VAR); VARDTYPE(new AstBasicDType($<fl>1, LOGIC_IMPLICIT)); }
-	|	/**/ 	    yVAR lifetimeE signingE rangeList { /*VARRESET-in-ddVar*/ VARDTYPE(GRAMMARP->addRange(new AstBasicDType($<fl>1, LOGIC_IMPLICIT, $3), $4,false)); }
+	|	/**/ 	    yVAR lifetimeE signingE rangeList { /*VARRESET-in-ddVar*/ VARDTYPE(GRAMMARP->addRange(new AstBasicDType($<fl>1, LOGIC_IMPLICIT, $3), $4,true)); }
 	//
 	//			// implicit_type expanded into /*empty*/ or "signingE rangeList"
 	|	yCONST__ETC yVAR lifetimeE data_type	{ VARRESET_NONLIST(VAR); VARDTYPE(new AstConstDType($<fl>1, VFlagChildDType(), $4)); }
 	|	yCONST__ETC yVAR lifetimeE		{ VARRESET_NONLIST(VAR); VARDTYPE(new AstConstDType($<fl>1, VFlagChildDType(), new AstBasicDType($<fl>2, LOGIC_IMPLICIT))); }
-	|	yCONST__ETC yVAR lifetimeE signingE rangeList { VARRESET_NONLIST(VAR); VARDTYPE(new AstConstDType($<fl>1, VFlagChildDType(), GRAMMARP->addRange(new AstBasicDType($<fl>2, LOGIC_IMPLICIT, $4), $5,false))); }
+	|	yCONST__ETC yVAR lifetimeE signingE rangeList { VARRESET_NONLIST(VAR); VARDTYPE(new AstConstDType($<fl>1, VFlagChildDType(), GRAMMARP->addRange(new AstBasicDType($<fl>2, LOGIC_IMPLICIT, $4), $5,true))); }
 	//
 	//			// Expanded: "constE lifetimeE data_type"
 	|	/**/		      data_type		{ VARRESET_NONLIST(VAR); VARDTYPE($1); }
@@ -1436,7 +1438,7 @@ data_declarationVarFront:	// IEEE: part of data_declaration
 implicit_typeE<dtypep>:		// IEEE: part of *data_type_or_implicit
 	//			// Also expanded in data_declaration
 		/* empty */				{ $$ = NULL; }
-	|	signingE rangeList			{ $$ = GRAMMARP->addRange(new AstBasicDType($2->fileline(), LOGIC_IMPLICIT, $1),$2,false); }
+	|	signingE rangeList			{ $$ = GRAMMARP->addRange(new AstBasicDType($2->fileline(), LOGIC_IMPLICIT, $1),$2,true); }
 	|	signing					{ $$ = new AstBasicDType($<fl>1, LOGIC_IMPLICIT, $1); }
 	;
 
@@ -1511,7 +1513,7 @@ module_common_item<nodep>:	// ==IEEE: module_common_item
 	//			// + module_instantiation from module_or_generate_item
 	|	etcInst 				{ $$ = $1; }
 	|	concurrent_assertion_item		{ $$ = $1; }
-	//UNSUP	bind_directive				{ $$ = $1; }
+	|	bind_directive				{ $$ = $1; }
 	|	continuous_assign			{ $$ = $1; }
 	//			// IEEE: net_alias
 	//UNSUP	yALIAS variable_lvalue aliasEqList ';'	{ UNSUP }
@@ -1546,6 +1548,31 @@ module_or_generate_item_declaration<nodep>:	// ==IEEE: module_or_generate_item_d
 	| 	genvar_declaration			{ $$ = $1; }
 	|	clocking_declaration			{ $$ = $1; }
 	//UNSUP	yDEFAULT yCLOCKING idAny/*new-clocking_identifier*/ ';'	{ $$ = $1; }
+	;
+
+bind_directive<nodep>:		// ==IEEE: bind_directive + bind_target_scope
+	//			// ';' - Note IEEE grammar is wrong, includes extra ';' - it's already in module_instantiation
+	//			// We merged the rules - id may be a bind_target_instance or module_identifier or interface_identifier
+		yBIND bind_target_instance bind_instantiation	{ $$ = new AstBind($<fl>1,*$2,$3); }
+	|	yBIND bind_target_instance ':' bind_target_instance_list bind_instantiation	{ $$=NULL; $1->v3error("Unsupported: Bind with instance list"); }
+	;
+
+bind_target_instance_list:	// ==IEEE: bind_target_instance_list
+		bind_target_instance			{ }
+	|	bind_target_instance_list ',' bind_target_instance	{ }
+	;
+
+bind_target_instance<strp>:	// ==IEEE: bind_target_instance
+	//UNSUP	hierarchical_identifierBit		{ }
+		idAny					{ $$ = $1; }
+	;
+
+bind_instantiation<nodep>:	// ==IEEE: bind_instantiation
+	//			// IEEE: program_instantiation
+	//			// IEEE: + module_instantiation
+	//			// IEEE: + interface_instantiation
+	//			// Need to get an AstBind instead of AstCell, so have special rules
+		instDecl				{ $$ = $1; }
 	;
 
 //************************************************
@@ -1770,7 +1797,7 @@ rangeList<rangep>:		// IEEE: {packed_dimension}
 
 wirerangeE<dtypep>:
 		/* empty */    		               	{ $$ = new AstBasicDType(CRELINE(), LOGIC); }  // not implicit
-	|	rangeList 				{ $$ = GRAMMARP->addRange(new AstBasicDType($1->fileline(), LOGIC),$1,false); }  // not implicit
+	|	rangeList 				{ $$ = GRAMMARP->addRange(new AstBasicDType($1->fileline(), LOGIC),$1,true); }  // not implicit
 	;
 
 // IEEE: select
@@ -2480,7 +2507,7 @@ funcId<ftaskp>:			// IEEE: function_data_type_or_implicit + part of function_bod
 			  SYMP->pushNewUnder($$, NULL); }
 	|	signingE rangeList	tfIdScoped
 			{ $$ = new AstFunc ($<fl>3,*$<strp>3,NULL,
-					    GRAMMARP->addRange(new AstBasicDType($<fl>3, LOGIC_IMPLICIT, $1), $2,false));
+					    GRAMMARP->addRange(new AstBasicDType($<fl>3, LOGIC_IMPLICIT, $1), $2,true));
 			  SYMP->pushNewUnder($$, NULL); }
 	|	signing			tfIdScoped
 			{ $$ = new AstFunc ($<fl>2,*$<strp>2,NULL,
@@ -2550,14 +2577,14 @@ tf_port_item<nodep>:		// ==IEEE: tf_port_item
 
 tf_port_itemFront:		// IEEE: part of tf_port_item, which has the data type
 		data_type				{ VARDTYPE($1); }
-	|	signingE rangeList			{ VARDTYPE(GRAMMARP->addRange(new AstBasicDType($2->fileline(), LOGIC_IMPLICIT, $1), $2, false)); }
+	|	signingE rangeList			{ VARDTYPE(GRAMMARP->addRange(new AstBasicDType($2->fileline(), LOGIC_IMPLICIT, $1), $2, true)); }
 	|	signing					{ VARDTYPE(new AstBasicDType($<fl>1, LOGIC_IMPLICIT, $1)); }
 	|	yVAR data_type				{ VARDTYPE($2); }
 	|	yVAR implicit_typeE			{ VARDTYPE($2); }
 	//
 	|	tf_port_itemDir /*implicit*/		{ VARDTYPE(NULL); /*default_nettype-see spec*/ }
 	|	tf_port_itemDir data_type		{ VARDTYPE($2); }
-	|	tf_port_itemDir signingE rangeList	{ VARDTYPE(GRAMMARP->addRange(new AstBasicDType($3->fileline(), LOGIC_IMPLICIT, $2),$3,false)); }
+	|	tf_port_itemDir signingE rangeList	{ VARDTYPE(GRAMMARP->addRange(new AstBasicDType($3->fileline(), LOGIC_IMPLICIT, $2),$3,true)); }
 	|	tf_port_itemDir signing			{ VARDTYPE(new AstBasicDType($<fl>2, LOGIC_IMPLICIT, $2)); }
 	|	tf_port_itemDir yVAR data_type		{ VARDTYPE($3); }
 	|	tf_port_itemDir yVAR implicit_typeE	{ VARDTYPE($3); }
@@ -3433,7 +3460,11 @@ AstNodeDType* V3ParseGrammar::createArray(AstNodeDType* basep, AstRange* rangep,
 	while (rangep) {
 	    AstRange* prevp = rangep->backp()->castRange();
 	    if (prevp) rangep->unlinkFrBack();
-	    arrayp = new AstArrayDType(rangep->fileline(), VFlagChildDType(), arrayp, rangep, isPacked);
+	    if (isPacked) {
+	        arrayp = new AstPackArrayDType(rangep->fileline(), VFlagChildDType(), arrayp, rangep);
+	    } else {
+	        arrayp = new AstUnpackArrayDType(rangep->fileline(), VFlagChildDType(), arrayp, rangep);
+	    }
 	    rangep = prevp;
 	}
     }
