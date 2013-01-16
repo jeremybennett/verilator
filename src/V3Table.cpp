@@ -189,10 +189,10 @@ private:
 	// Change it variable
 	FileLine* fl = nodep->fileline();
 	AstNodeDType* dtypep
-	    = new AstArrayDType (fl,
-				 nodep->findBitDType(m_outVarps.size(),
-						     m_outVarps.size(), AstNumeric::UNSIGNED),
-				 new AstRange (fl, VL_MASK_I(m_inWidth), 0), false);
+	    = new AstUnpackArrayDType (fl,
+				       nodep->findBitDType(m_outVarps.size(),
+							   m_outVarps.size(), AstNumeric::UNSIGNED),
+				       new AstRange (fl, VL_MASK_I(m_inWidth), 0));
 	v3Global.rootp()->typeTablep()->addTypesp(dtypep);
 	AstVar* chgVarp
 	    = new AstVar (fl, AstVarType::MODULETEMP,
@@ -237,8 +237,8 @@ private:
 	    AstVar* outvarp = outvscp->varp();
 	    FileLine* fl = nodep->fileline();
 	    AstNodeDType* dtypep
-		= new AstArrayDType (fl, outvarp->dtypep(),
-				     new AstRange (fl, VL_MASK_I(m_inWidth), 0), false);
+		= new AstUnpackArrayDType (fl, outvarp->dtypep(),
+					   new AstRange (fl, VL_MASK_I(m_inWidth), 0));
 	    v3Global.rootp()->typeTablep()->addTypesp(dtypep);
 	    AstVar* tablevarp
 		= new AstVar (fl, AstVarType::MODULETEMP,
@@ -349,7 +349,8 @@ private:
 	    AstVarScope* vsc2p= *it;
 	    AstVar* var2p = vsc2p->varp();
 	    if (var1p->width() == var2p->width()
-		&& var1p->dtypep()->arrayElements() == var2p->dtypep()->arrayElements()) {
+		&& (var1p->dtypep()->arrayUnpackedElements()
+		    == var2p->dtypep()->arrayUnpackedElements())) {
 		AstNode* init1p = var1p->valuep()->castInitArray();
 		AstNode* init2p = var2p->valuep()->castInitArray();
 		if (init1p->sameTree(init2p)) {
