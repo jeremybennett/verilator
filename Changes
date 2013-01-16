@@ -3,6 +3,18 @@ Revision history for Verilator
 The contributors that suggested a given feature are shown in [].  [by ...]
 indicates the contributor was also the author of the fix; Thanks!
 
+* Verilator 3.8** devel
+
+***   Fix nested packed arrays and struct, bug600. [Jeremy Bennett]
+      Packed arrays are now represented as a single linear vector in
+      Verilated models.  This may affect packed arrays that are public or
+      accessed via the VPI.
+
+***   Support bind, to module names only, bug602. [Ed Lander]
+
+***   Fix pin width mismatch error, bug595.  [Alex Solomatnikov]
+
+
 * Verilator 3.844 2013/01/09
 
 ***   Support "unsigned int" DPI import functions, msg966.  [Alex Lee]
@@ -13,7 +25,7 @@ indicates the contributor was also the author of the fix; Thanks!
 
 ****  Fix task inlining under $display and case, bug589, bug598.  [Holger Waechtler]
 
-****  Fix package import of non-localparam parameter, bug591.  [Jeremy Bennett]
+****  Fix package import of non-localparam parameter, bug474, bug591.  [Jeremy Bennett]
 
 ****  Fix package import of package imports, partial bug592.  [Jeremy Bennett]
 
