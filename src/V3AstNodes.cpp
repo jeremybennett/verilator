@@ -307,10 +307,12 @@ AstNodeDType* AstNodeDType::dtypeDimensionp(int dimension) {
     //	   DECL:	VAR a (ARRAYSEL0 (ARRAYSEL1 (ARRAYSEL2 (DT RANGE3))))
     //	      *or*	VAR a (ARRAYSEL0 (ARRAYSEL1 (ARRAYSEL2 (ARRAYSEL3 (DT))))
     //	   SEL1 needs to select from entire variable which is a pointer to ARRAYSEL0
+    // TODO this function should be removed in favor of recursing the dtype(),
+    // as that allows for more complicated data types.
     int dim = 0;
     for (AstNodeDType* dtypep=this; dtypep; ) {
 	dtypep = dtypep->skipRefp();  // Skip AstRefDType/AstTypedef, or return same node
-	if (AstArrayDType* adtypep = dtypep->castArrayDType()) {
+	if (AstNodeArrayDType* adtypep = dtypep->castNodeArrayDType()) {
 	    if ((dim++)==dimension) {
 		return dtypep;
 	    }
@@ -340,11 +342,11 @@ AstNodeDType* AstNodeDType::dtypeDimensionp(int dimension) {
     return NULL;
 }
 
-uint32_t AstNodeDType::arrayElements() {
+uint32_t AstNodeDType::arrayUnpackedElements() {
     uint32_t entries=1;
     for (AstNodeDType* dtypep=this; dtypep; ) {
 	dtypep = dtypep->skipRefp();  // Skip AstRefDType/AstTypedef, or return same node
-	if (AstArrayDType* adtypep = dtypep->castArrayDType()) {
+	if (AstUnpackArrayDType* adtypep = dtypep->castUnpackArrayDType()) {
 	    entries *= adtypep->elementsConst();
 	    dtypep = adtypep->subDTypep();
 	}
@@ -362,8 +364,8 @@ pair<uint32_t,uint32_t> AstNodeDType::dimensions() {
     uint32_t unpacked = 0;
     for (AstNodeDType* dtypep=this; dtypep; ) {
 	dtypep = dtypep->skipRefp();  // Skip AstRefDType/AstTypedef, or return same node
-	if (AstArrayDType* adtypep = dtypep->castArrayDType()) {
-	    if (adtypep->isPacked()) packed += 1;
+	if (AstNodeArrayDType* adtypep = dtypep->castNodeArrayDType()) {
+	    if (adtypep->castPackArrayDType()) packed += 1;
 	    else unpacked += 1;
 	    dtypep = adtypep->subDTypep();
 	}
@@ -384,26 +386,12 @@ int AstNodeDType::widthPow2() const {
     return 1;
 }
 
-// Special operators
-int AstArraySel::dimension(AstNode* nodep) {
-    // How many dimensions is this reference from the base variable?
-    // nodep is typically the fromp() of a select; thus the first select
-    // is selecting from the entire variable type - effectively dimension 0.
-    // Dimension passed to AstVar::dtypeDimensionp; see comments there
-    int dim = 0;
-    while (nodep) {
-	if (nodep->castNodeSel()) { dim++; nodep=nodep->castNodeSel()->fromp(); continue; }
-	if (nodep->castNodePreSel()) { dim++; nodep=nodep->castNodePreSel()->fromp(); continue; }
-	break;
-    }
-    return dim;
-}
 AstNode* AstArraySel::baseFromp(AstNode* nodep) {	///< What is the base variable (or const) this dereferences?
     // Else AstArraySel etc; search for the base
     while (nodep) {
 	if (nodep->castArraySel()) { nodep=nodep->castArraySel()->fromp(); continue; }
 	else if (nodep->castSel()) { nodep=nodep->castSel()->fromp(); continue; }
-	// AstNodeSelPre stashes the associated variable under a ATTROF of AstAttrType::VAR_BASE/MEMBER_BASE so it isn't constified
+	// AstNodeSelPre stashes the associated variable under an ATTROF of AstAttrType::VAR_BASE/MEMBER_BASE so it isn't constified
 	else if (nodep->castAttrOf()) { nodep=nodep->castAttrOf()->fromp(); continue; }
 	else if (nodep->castNodePreSel()) {
 	    if (nodep->castNodePreSel()->attrp()) {
@@ -667,10 +655,6 @@ void AstNode::dump(ostream& str) {
     if (name()!="") str<<"  "<<AstNode::quoteName(name());
 }
 
-void AstArrayDType::dump(ostream& str) {
-    this->AstNodeDType::dump(str);
-    if (isPacked()) str<<" [PACKED]";
-}
 void AstArraySel::dump(ostream& str) {
     this->AstNode::dump(str);
     str<<" [start:"<<start()<<"] [length:"<<length()<<"]";
@@ -750,6 +734,15 @@ void AstNodeDType::dumpSmall(ostream& str) {
     if (!widthSized()) str<<"/"<<widthMin();
     str<<")";
 }
+void AstNodeArrayDType::dumpSmall(ostream& str) {
+    this->AstNodeDType::dumpSmall(str);
+    if (castPackArrayDType()) str<<"p"; else str<<"u";
+    str<<"["<<msb()<<":"<<lsb()<<"]";
+}
+void AstNodeArrayDType::dump(ostream& str) {
+    this->AstNodeDType::dump(str);
+    str<<" ["<<msb()<<":"<<lsb()<<"]";
+}
 void AstNodeModule::dump(ostream& str) {
     this->AstNode::dump(str);
     str<<"  L"<<level();
@@ -760,6 +753,13 @@ void AstNodeModule::dump(ostream& str) {
 void AstPackageImport::dump(ostream& str) {
     this->AstNode::dump(str);
     str<<" -> "<<packagep();
+}
+void AstSel::dump(ostream& str) {
+    this->AstNode::dump(str);
+    if (declRange().ranged()) {
+	str<<" decl["<<declRange().left()<<":"<<declRange().right()<<"]";
+	if (declElWidth()!=1) str<<"/"<<declElWidth();
+    }
 }
 void AstTypeTable::dump(ostream& str) {
     this->AstNode::dump(str);
