@@ -544,6 +544,8 @@ AstBasicDType* AstTypeTable::findLogicBitDType(FileLine* fl, AstBasicDTypeKwd kw
     if (it != mapr.end()) return it->second;
     //
     AstBasicDType* new1p = new AstBasicDType(fl, AstBasicDTypeKwd::BIT, numeric, width, widthMin);
+    // Above should be below, but fails --x-initial-edge test
+    //AstBasicDType* new1p = new AstBasicDType(fl, kwd, numeric, width, widthMin);
     // Because the detailed map doesn't update this map,
     // check the detailed map for this same node, and if found update this map
     // Also adds this new node to the detailed map
@@ -552,6 +554,15 @@ AstBasicDType* AstTypeTable::findLogicBitDType(FileLine* fl, AstBasicDTypeKwd kw
     else addTypesp(newp);
     //
     mapr.insert(make_pair(widths,newp));
+    return newp;
+}
+
+AstBasicDType* AstTypeTable::findLogicBitDType(FileLine* fl, AstBasicDTypeKwd kwd,
+					       VNumRange range, int widthMin, AstNumeric numeric) {
+    AstBasicDType* new1p = new AstBasicDType(fl, kwd, numeric, range, widthMin);
+    AstBasicDType* newp = findInsertSameDType(new1p);
+    if (newp != new1p) new1p->deleteTree();
+    else addTypesp(newp);
     return newp;
 }
 
