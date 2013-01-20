@@ -343,7 +343,7 @@ private:
 public:
     ASTNODE_NODE_FUNCS(BasicDType, BASICDTYPE)
     virtual void dump(ostream& str);
-    virtual V3Hash sameHash() const { return V3Hash(V3Hash(m.m_keyword), V3Hash(m.m_nrange.msb())); }
+    virtual V3Hash sameHash() const { return V3Hash(V3Hash(m.m_keyword), V3Hash(m.m_nrange.hi())); }
     virtual bool same(AstNode* samep) const {  // width/widthMin/numeric compared elsewhere
 	return samep->castBasicDType()->m == m; }
     virtual string name()	const { return m.m_keyword.ascii(); }
@@ -368,13 +368,13 @@ public:
     bool	isZeroInit() const { return keyword().isZeroInit(); }
     bool	isRanged() const { return rangep() || m.m_nrange.ranged(); }
     const VNumRange& nrange() const { return m.m_nrange; } // Generally the msb/lsb/etc funcs should be used instead
-    int		msb() const { return (rangep() ? rangep()->msbConst() : m.m_nrange.msb()); }
-    int		lsb() const { return (rangep() ? rangep()->lsbConst() : m.m_nrange.lsb()); }
+    int		msb() const { return (rangep() ? rangep()->msbConst() : m.m_nrange.hi()); }
+    int		lsb() const { return (rangep() ? rangep()->lsbConst() : m.m_nrange.lo()); }
     int		left() const { return littleEndian()?lsb():msb(); }  // How to show a declaration
     int		right() const { return littleEndian()?msb():lsb(); }
-    int		msbMaxSelect() const { return (lsb()<0 ? msb()-lsb() : msb()); } // Maximum value a [] select may index
     bool	littleEndian() const { return (rangep() ? rangep()->littleEndian() : m.m_nrange.littleEndian()); }
     bool	implicit() const { return keyword() == AstBasicDTypeKwd::LOGIC_IMPLICIT; }
+    VNumRange declRange() const { return isRanged() ? VNumRange(msb(), lsb(), littleEndian()) : VNumRange(); }
     void	cvtRangeConst() {  // Convert to smaller represenation
 	if (rangep() && rangep()->msbp()->castConst() && rangep()->lsbp()->castConst()) {
 	    m.m_nrange.init(rangep()->msbConst(), rangep()->lsbConst(),
@@ -4504,11 +4504,14 @@ struct AstNetlist : public AstNode {
     // Children:  MODULEs & CFILEs
 private:
     AstTypeTable* m_typeTablep;	// Reference to top type table, for faster lookup
+    AstPackage*	  m_dollarUnitPkgp;
 public:
     AstNetlist() : AstNode(new FileLine("AstRoot",0)) {
 	m_typeTablep = NULL;
+	m_dollarUnitPkgp = NULL;
     }
     ASTNODE_NODE_FUNCS(Netlist, NETLIST)
+    virtual bool broken() const { return (m_dollarUnitPkgp && !m_dollarUnitPkgp->brokeExists()); }
     AstNodeModule*	modulesp() 	const { return op1p()->castNodeModule();}	// op1 = List of modules
     AstNodeModule*  topModulep() const { return op1p()->castNodeModule(); }	// * = Top module in hierarchy (first one added, for now)
     void addModulep(AstNodeModule* modulep) { addOp1p(modulep); }
@@ -4518,6 +4521,16 @@ public:
     void addMiscsp(AstNode* nodep) { addOp3p(nodep); }
     AstTypeTable* typeTablep() { return m_typeTablep; }
     void addTypeTablep(AstTypeTable* nodep) { m_typeTablep = nodep; addMiscsp(nodep); }
+    AstPackage* dollarUnitPkgp() const { return m_dollarUnitPkgp; }
+    AstPackage* dollarUnitPkgAddp() {
+	if (!m_dollarUnitPkgp) {
+	    m_dollarUnitPkgp = new AstPackage(fileline(), AstPackage::dollarUnitName());
+	    m_dollarUnitPkgp->inLibrary(true);  // packages are always libraries; don't want to make them a "top"
+	    m_dollarUnitPkgp->modTrace(false);  // may reconsider later
+	    m_dollarUnitPkgp->internal(true);
+	    addModulep(m_dollarUnitPkgp);
+	}
+	return m_dollarUnitPkgp; }
 };
 
 //######################################################################

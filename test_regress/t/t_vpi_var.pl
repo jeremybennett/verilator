@@ -10,11 +10,12 @@ if (!$::Driver) { use FindBin; exec("$FindBin::Bin/bootstrap.pl", @ARGV, $0); di
 compile (
 	 make_top_shell => 0,
 	 make_main => 0,
-	 verilator_flags2 => ["-CFLAGS '-ggdb' --exe --no-l2name $Self->{t_dir}/t_vpi_var.cpp"],
+	 verilator_flags2 => ["-CFLAGS '-DVL_DEBUG -ggdb' --exe --no-l2name $Self->{t_dir}/t_vpi_var.cpp"],
 	 );
 
 execute (
 	 check_finished=>1,
+         all_run_flags => ['+PLUS +INT=1234 +STRSTR']
      );
 
 ok(1);
