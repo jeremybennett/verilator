@@ -370,16 +370,9 @@ private:
 	int msb = nodep->msbConst();
 	int lsb = nodep->lsbConst();
 	if (msb<lsb) {
-	    // If it's an array, ok to have either ordering, we'll just correct
-	    // So, see if we're sitting under a variable's arrayp.
-	    AstNode* huntbackp = nodep;
-	    while (huntbackp->backp()->castRange()) huntbackp=huntbackp->backp();
-	    if (huntbackp->backp()->castNodeArrayDType()) {
-	    } else {
-		// Little endian bits are legal, just remember to swap
-		// Warning is in V3Width to avoid false warnings when in "off" generate if's
-		nodep->littleEndian(!nodep->littleEndian());
-	    }
+	    // Little endian bits are legal, just remember to swap
+	    // Warning is in V3Width to avoid false warnings when in "off" generate if's
+	    nodep->littleEndian(!nodep->littleEndian());
 	    // Internally we'll always have msb() be the greater number
 	    // We only need to correct when doing [] AstSel extraction,
 	    // and when tracing the vector.
@@ -442,8 +435,8 @@ private:
 	    int fromlsb = 0;
 	    int elw = nodep->declElWidth();  // Must adjust to tell user bit ranges
 	    if (nodep->declRange().ranged()) {
-		frommsb = nodep->declRange().msbMaxSelect()*elw + (elw-1);  // Corrected for negative lsb
-		fromlsb = nodep->declRange().lsb()*elw;
+		frommsb = nodep->declRange().hiMaxSelect()*elw + (elw-1);  // Corrected for negative lsb
+		fromlsb = nodep->declRange().lo()*elw;
 	    } else {
 		//nodep->v3fatalSrc("Should have been declRanged in V3WidthSel");
 	    }
@@ -843,13 +836,15 @@ private:
 		    if (width==1) {
 			// one bit parameter is same as "parameter [0] foo", not "parameter logic foo"
 			// as you can extract "foo[0]" from a parameter but not a wire
-			nodep->dtypeChgWidthSigned(width, nodep->valuep()->widthMin(),issigned);
+			nodep->dtypeChgWidthSigned(width, nodep->valuep()->widthMin(),
+						   issigned?AstNumeric::SIGNED : AstNumeric::UNSIGNED);
 			nodep->dtypep(nodep->findLogicRangeDType
 				      (VNumRange(0,0,false),
 				       nodep->valuep()->widthMin(),
 				       issigned?AstNumeric::SIGNED : AstNumeric::UNSIGNED));
 		    } else {
-			nodep->dtypeChgWidthSigned(width, nodep->valuep()->widthMin(),issigned);
+			nodep->dtypeChgWidthSigned(width, nodep->valuep()->widthMin(),
+						   issigned?AstNumeric::SIGNED : AstNumeric::UNSIGNED);
 		    }
 		    didchk = true;
 		    nodep->valuep()->iterateAndNext(*this,WidthVP(width,nodep->widthMin(),FINAL).p());
@@ -1908,7 +1903,8 @@ private:
 	int width  = max(vup->c()->width(),    max(nodep->lhsp()->width(),    nodep->rhsp()->width()));
 	int mwidth = max(vup->c()->widthMin(), max(nodep->lhsp()->widthMin(), nodep->rhsp()->widthMin()));
 	bool expSigned = (nodep->lhsp()->isSigned() && nodep->rhsp()->isSigned());
-	nodep->dtypeChgWidthSigned(width,mwidth,expSigned);
+	nodep->dtypeChgWidthSigned(width,mwidth,
+				   expSigned?AstNumeric::SIGNED : AstNumeric::UNSIGNED);
 	if (vup->c()->final()) {
 	    // Final call, so make sure children check their sizes
 	    nodep->lhsp()->iterateAndNext(*this,WidthVP(width,mwidth,FINAL).p());
@@ -2079,7 +2075,8 @@ private:
 	    linker.relink(newp);
 	    nodep=newp;
 	}
-	nodep->dtypeChgWidthSigned(expWidth,expWidth,expSigned);
+	nodep->dtypeChgWidthSigned(expWidth,expWidth,
+				   expSigned?AstNumeric::SIGNED : AstNumeric::UNSIGNED);
 	UINFO(4,"             _new: "<<nodep<<endl);
     }
 
