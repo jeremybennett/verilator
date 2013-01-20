@@ -94,14 +94,10 @@ private:
 	AstNode* errp = ddtypep;
 	UINFO(9,"  fromData.ddtypep = "<<ddtypep<<endl);
 	if (AstNodeArrayDType* adtypep = ddtypep->castNodeArrayDType()) {
-	    fromRange.init(adtypep->msb(),
-			   adtypep->lsb(),
-			   adtypep->rangep()->littleEndian());
+	    fromRange = adtypep->declRange();
 	}
 	else if (AstNodeClassDType* adtypep = ddtypep->castNodeClassDType()) {
-	    fromRange.init(adtypep->msb(),
-			   adtypep->lsb(),
-			   false); // big endian
+	    fromRange = adtypep->declRange();
 	}
 	else if (AstBasicDType* adtypep = ddtypep->castBasicDType()) {
 	    if (adtypep->isRanged()) {
@@ -109,9 +105,7 @@ private:
 		    && (!adtypep->rangep()->msbp()->castConst()
 			|| !adtypep->rangep()->lsbp()->castConst()))
 		    nodep->v3fatalSrc("Non-constant variable range; errored earlier");  // in constifyParam(bfdtypep)
-		fromRange.init(adtypep->msb(),
-			       adtypep->lsb(),
-			       adtypep->littleEndian());
+		fromRange = adtypep->declRange();
 	    } else {
 		nodep->v3error("Illegal bit or array select; type does not have a bit range, or bad dimension: type is "
 			       <<errp->prettyName());
@@ -171,11 +165,11 @@ private:
 	} else {
 	    if (fromRange.littleEndian()) {
 		// reg [1:3] was swapped to [3:1] (lsbEndianedp==3) and needs a SUB(3,under)
-		AstNode* newp = newSubNeg(fromRange.msb(), underp);
+		AstNode* newp = newSubNeg(fromRange.hi(), underp);
 		return newp;
 	    } else {
 		// reg [3:1] needs a SUB(under,1)
-		AstNode* newp = newSubNeg(underp, fromRange.lsb());
+		AstNode* newp = newSubNeg(underp, fromRange.lo());
 		return newp;
 	    }
 	}
@@ -200,8 +194,8 @@ private:
 	if (AstUnpackArrayDType* adtypep = ddtypep->castUnpackArrayDType()) {
 	    // SELBIT(array, index) -> ARRAYSEL(array, index)
 	    AstNode* subp = rhsp;
-	    if (fromRange.lsb()!=0 || fromRange.msb()<0) {
-		subp = newSubNeg (subp, fromRange.lsb());
+	    if (fromRange.lo()!=0 || fromRange.hi()<0) {
+		subp = newSubNeg (subp, fromRange.lo());
 	    }
 	    AstArraySel* newp = new AstArraySel (nodep->fileline(),
 						 fromp, subp);
@@ -212,8 +206,8 @@ private:
 	else if (AstPackArrayDType* adtypep = ddtypep->castPackArrayDType()) {
 	    // SELBIT(array, index) -> SEL(array, index*width-of-subindex, width-of-subindex)
 	    AstNode* subp = rhsp;
-	    if (fromRange.lsb()!=0 || fromRange.msb()<0) {
-		subp = newSubNeg (subp, fromRange.lsb());
+	    if (fromRange.lo()!=0 || fromRange.hi()<0) {
+		subp = newSubNeg (subp, fromRange.lo());
 	    }
 	    if (!fromRange.elements() || (adtypep->width() % fromRange.elements())!=0)
 		adtypep->v3fatalSrc("Array extraction with width miscomputed "
@@ -358,20 +352,22 @@ private:
 	FromData fromdata = fromDataForArray(nodep, fromp, width!=1);
 	AstNodeDType* ddtypep = fromdata.m_dtypep;
 	VNumRange fromRange = fromdata.m_fromRange;
-	if (ddtypep->castBasicDType()) {
+	if (ddtypep->castBasicDType()
+	    || (ddtypep->castNodeClassDType()
+		&& ddtypep->castNodeClassDType()->packed())) {
 	    AstSel* newp = NULL;
 	    if (nodep->castSelPlus()) {
 		if (fromRange.littleEndian()) {
 		    // SELPLUS(from,lsb,width) -> SEL(from, (vector_msb-width+1)-sel, width)
 		    newp = new AstSel (nodep->fileline(),
 				       fromp,
-				       newSubNeg((fromRange.msb()-width+1), rhsp),
+				       newSubNeg((fromRange.hi()-width+1), rhsp),
 				       widthp);
 		} else {
 		    // SELPLUS(from,lsb,width) -> SEL(from, lsb-vector_lsb, width)
 		    newp = new AstSel (nodep->fileline(),
 				       fromp,
-				       newSubNeg(rhsp, fromRange.lsb()),
+				       newSubNeg(rhsp, fromRange.lo()),
 				       widthp);
 		}
 	    } else if (nodep->castSelMinus()) {
@@ -379,13 +375,13 @@ private:
 		    // SELMINUS(from,msb,width) -> SEL(from, msb-[bit])
 		    newp = new AstSel (nodep->fileline(),
 				       fromp,
-				       newSubNeg(fromRange.msb(), rhsp),
+				       newSubNeg(fromRange.hi(), rhsp),
 				       widthp);
 		} else {
 		    // SELMINUS(from,msb,width) -> SEL(from, msb-(width-1)-lsb#)
 		    newp = new AstSel (nodep->fileline(),
 				       fromp,
-				       newSubNeg(rhsp, fromRange.lsb()+(width-1)),
+				       newSubNeg(rhsp, fromRange.lo()+(width-1)),
 				       widthp);
 		}
 	    } else {

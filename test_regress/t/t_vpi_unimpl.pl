@@ -2,24 +2,20 @@
 if (!$::Driver) { use FindBin; exec("$FindBin::Bin/bootstrap.pl", @ARGV, $0); die; }
 # DESCRIPTION: Verilator: Verilog Test driver/expect definition
 #
-# Copyright 2003-2009 by Wilson Snyder. This program is free software; you can
+# Copyright 2010 by Wilson Snyder. This program is free software; you can
 # redistribute it and/or modify it under the terms of either the GNU
 # Lesser General Public License Version 3 or the Perl Artistic License
 # Version 2.0.
 
 compile (
-	 verilator_flags2 => ['--sp --coverage-toggle --stats'],
+	 make_top_shell => 0,
+	 make_main => 0,
+	 verilator_flags2 => ["-CFLAGS '-DVL_DEBUG -ggdb' --exe --no-l2name $Self->{t_dir}/t_vpi_unimpl.cpp"],
 	 );
 
 execute (
-	 check_finished=>1,
-	 );
-
-# Read the input .v file and do any CHECK_COVER requests
-inline_checks();
-
-file_grep ($Self->{stats}, qr/Coverage, Toggle points joined\s+(\d+)/i, 25)
-    if $Self->{vlt};
+	 check_finished=>1
+     );
 
 ok(1);
 1;
