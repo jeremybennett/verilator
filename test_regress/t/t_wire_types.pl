@@ -7,14 +7,14 @@ if (!$::Driver) { use FindBin; exec("$FindBin::Bin/bootstrap.pl", @ARGV, $0); di
 # Lesser General Public License Version 3 or the Perl Artistic License
 # Version 2.0.
 
+$Self->{verilated_randReset} = 1;  # allow checking if we initialize vars to zero only when needed
+
 compile (
-	 verilator_flags2 => ["--lint-only"],
-	 fails=>1,
-	 expect=>
-'%Error: t/t_inst_misarray_bad.v:\d+: Illegal port connection foo, port is not an array expression is an array.
-%Error: Exiting due to.*',
 	 );
 
+execute (
+	 check_finished=>1,
+     );
 
 ok(1);
 1;
