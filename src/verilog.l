@@ -386,12 +386,20 @@ word	[a-zA-Z0-9_]+
   "$bits"		{ FL; return yD_BITS; }
   "$clog2"		{ FL; return yD_CLOG2; }
   "$countones"		{ FL; return yD_COUNTONES; }
+  "$dimensions"		{ FL; return yD_DIMENSIONS; }
   "$error"		{ FL; return yD_ERROR; }
   "$fatal"		{ FL; return yD_FATAL; }
+  "$high"		{ FL; return yD_HIGH; }
+  "$increment"		{ FL; return yD_INCREMENT; }
   "$info"		{ FL; return yD_INFO; }
   "$isunknown"		{ FL; return yD_ISUNKNOWN; }
+  "$left"		{ FL; return yD_LEFT; }
+  "$low"		{ FL; return yD_LOW; }
   "$onehot"		{ FL; return yD_ONEHOT; }
   "$onehot0"		{ FL; return yD_ONEHOT0; }
+  "$right"		{ FL; return yD_RIGHT; }
+  "$size"		{ FL; return yD_SIZE; }
+  "$unpacked_dimensions" { FL; return yD_UNPACKED_DIMENSIONS; }
   "$warning"		{ FL; return yD_WARNING; }
   /*     SV2005 Keywords */
   "$unit"		{ FL; return yD_UNIT; }  /* Yes, a keyword, not task */
@@ -416,6 +424,7 @@ word	[a-zA-Z0-9_]+
   "final"		{ FL; return yFINAL; }
   "iff"			{ FL; return yIFF; }
   "import"		{ FL; return yIMPORT; }
+  "inside"		{ FL; return yINSIDE; }
   "int"			{ FL; return yINT; }
   "logic"		{ FL; return yLOGIC; }
   "longint"		{ FL; return yLONGINT; }
@@ -461,7 +470,6 @@ word	[a-zA-Z0-9_]+
   "forkjoin"		{ yyerrorf("Unsupported: SystemVerilog 2005 reserved word not implemented: %s",yytext); }
   "ignore_bins"		{ yyerrorf("Unsupported: SystemVerilog 2005 reserved word not implemented: %s",yytext); }
   "illegal_bins"	{ yyerrorf("Unsupported: SystemVerilog 2005 reserved word not implemented: %s",yytext); }
-  "inside"		{ yyerrorf("Unsupported: SystemVerilog 2005 reserved word not implemented: %s",yytext); }
   "interface"		{ yyerrorf("Unsupported: SystemVerilog 2005 reserved word not implemented: %s",yytext); }
   "intersect"		{ yyerrorf("Unsupported: SystemVerilog 2005 reserved word not implemented: %s",yytext); }
   "join_any"		{ yyerrorf("Unsupported: SystemVerilog 2005 reserved word not implemented: %s",yytext); }

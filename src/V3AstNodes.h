@@ -65,6 +65,11 @@ public:
 	:AstNodeMath(fl)
 	,m_num(V3Number(fl,32,num)) { m_num.width(32,false); dtypeSetLogicSized(32,m_num.widthMin(),
 										AstNumeric::UNSIGNED); }
+    class Signed32 {};		// for creator type-overload selection
+    AstConst(FileLine* fl, Signed32, int32_t num)  // Signed 32-bit integer of specified value
+	:AstNodeMath(fl)
+	,m_num(V3Number(fl,32,num)) { m_num.width(32,32); dtypeSetLogicSized(32,m_num.widthMin(),
+									     AstNumeric::SIGNED); }
     class RealDouble {};		// for creator type-overload selection
     AstConst(FileLine* fl, RealDouble, double num)
 	:AstNodeMath(fl)
@@ -136,6 +141,11 @@ public:
 	:AstNode(fl) {
 	m_littleEndian = false;
 	setOp2p(new AstConst(fl,msb)); setOp3p(new AstConst(fl,lsb));
+    }
+    AstRange(FileLine* fl, VNumRange range)
+	:AstNode(fl) {
+	m_littleEndian = range.littleEndian();
+	setOp2p(new AstConst(fl,range.hi())); setOp3p(new AstConst(fl,range.lo()));
     }
     ASTNODE_NODE_FUNCS(Range, RANGE)
     AstNode* msbp() const { return op2p()->castNode(); }	// op2 = Msb expression
@@ -1288,7 +1298,7 @@ private:
     string	m_name;		// Cell name
     string	m_origName;	// Original name before dot addition
     string	m_modName;	// Module the cell instances
-    AstNodeModule*	m_modp;		// [AfterLink] Pointer to module instanced
+    AstNodeModule* m_modp;	// [AfterLink] Pointer to module instanced
 public:
     AstCell(FileLine* fl, const string& instName, const string& modName,
 	    AstPin* pinsp, AstPin* paramsp, AstRange* rangep)
@@ -2547,6 +2557,33 @@ struct AstFinal : public AstNode {
     AstNode*	bodysp() 	const { return op1p()->castNode(); }	// op1 = Expressions to evaluate
 };
 
+struct AstInside : public AstNodeMath {
+    AstInside(FileLine* fl, AstNode* exprp, AstNode* itemsp)
+	: AstNodeMath(fl) {
+	addOp1p(exprp); addOp2p(itemsp);
+	dtypeSetLogicBool();
+    }
+    ASTNODE_NODE_FUNCS(Inside, INSIDE)
+    AstNode* exprp() const { return op1p()->castNode(); }	// op1 = LHS expression to compare with
+    AstNode* itemsp() const { return op2p()->castNode(); }	// op2 = RHS, possibly a list of expr or AstInsideRange
+    virtual string emitVerilog() { return "%l inside { %r }"; }
+    virtual string emitC() { V3ERROR_NA; return ""; }
+    virtual bool cleanOut() { return false; }  // NA
+};
+
+struct AstInsideRange : public AstNodeMath {
+    AstInsideRange(FileLine* fl, AstNode* lhsp, AstNode* rhsp)
+	: AstNodeMath(fl) {
+	addOp1p(lhsp); addOp2p(rhsp);
+    }
+    ASTNODE_NODE_FUNCS(InsideRange, INSIDERANGE)
+    AstNode* lhsp() const { return op1p()->castNode(); }	// op1 = LHS
+    AstNode* rhsp() const { return op2p()->castNode(); }	// op2 = RHS
+    virtual string emitVerilog() { return "[%l:%r]"; }
+    virtual string emitC() { V3ERROR_NA; return ""; }
+    virtual bool cleanOut() { return false; }  // NA
+};
+
 struct AstInitArray : public AstNode {
     // Set a var to a large list of values
     // The values must be in sorted order, and not exceed the size of the var's array.
@@ -2736,12 +2773,14 @@ private:
     // Return a value of a attribute, for example a LSB or array LSB of a signal
     AstAttrType	m_attrType;	// What sort of extraction
 public:
-    AstAttrOf(FileLine* fl, AstAttrType attrtype, AstNode* fromp=NULL)
+    AstAttrOf(FileLine* fl, AstAttrType attrtype, AstNode* fromp=NULL, AstNode* dimp=NULL)
 	: AstNode(fl) {
 	setNOp1p(fromp);
+	setNOp2p(dimp);
 	m_attrType = attrtype; }
     ASTNODE_NODE_FUNCS(AttrOf, ATTROF)
     AstNode*	fromp() const { return op1p(); }
+    AstNode*	dimp() const { return op2p(); }
     AstAttrType	attrType() const { return m_attrType; }
     virtual void dump(ostream& str=cout);
 };
