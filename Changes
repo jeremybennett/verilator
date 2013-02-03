@@ -10,9 +10,15 @@ indicates the contributor was also the author of the fix; Thanks!
       Verilated models.  This may affect packed arrays that are public or
       accessed via the VPI.
 
+***   Support wires with data types, bug608. [Ed Lander]
+
 ***   Support bind, to module names only, bug602. [Ed Lander]
 
 ***   Support VPI product info, warning calls, etc, bug588. [Rick Porter]
+
+***   Support $left, $right and related functions, bug448. [Iztok Jeras]
+
+***   Support inside expressions.
 
 ***   Define SYSTEMVERILOG, SV_COV_START and other IEEE mandated predefines.
 
@@ -22,7 +28,13 @@ indicates the contributor was also the author of the fix; Thanks!
 
 ****  Fix signed/unsigned parameter misconversion, bug606.  [Jeremy Bennett]
 
+****  Fix segfault on multidimensional dotted arrays, bug607.  [Jie Xu]
+
+****  Fix per-bit array output connection error, bug414.  [Jan Egil Ruud]
+
 ****  Fix package logic var compile error.
+
+****  Fix enums with X values.
 
 
 * Verilator 3.844 2013/01/09
