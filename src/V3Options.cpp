@@ -28,6 +28,7 @@
 #include <cctype>
 #include <dirent.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <set>
 #include <list>
 #include <map>
@@ -77,7 +78,7 @@ struct V3OptionsImp {
 	    }
 	}
     }
-    void addLangExt(const string &langext, const V3LangCode lc) {
+    void addLangExt(const string& langext, const V3LangCode& lc) {
 	// New language extension replaces any pre-existing one.
 	(void)m_langExts.erase(langext);
 	m_langExts[langext] = lc;
@@ -98,7 +99,7 @@ void V3Options::addIncDirUser(const string& incdir) {
 void V3Options::addIncDirFallback(const string& incdir) {
     m_impp->addIncDirFallback(incdir);
 }
-void V3Options::addLangExt(const string &langext, const V3LangCode lc) {
+void V3Options::addLangExt(const string& langext, const V3LangCode& lc) {
     m_impp->addLangExt(langext, lc);
 }
 void V3Options::addLibExtV(const string& libext) {
@@ -275,6 +276,17 @@ bool V3Options::fileStatNormal(const string& filename) {
     if (err!=0) return false;
     if (S_ISDIR(m_stat.st_mode)) return false;
     return true;
+}
+
+void V3Options::fileNfsFlush(const string& filename) {
+    // NFS caches stat() calls so to get up-to-date information must
+    // do a open or opendir on the filename.
+    // Faster to just try both rather than check if a file is a dir.
+    if (DIR* dirp = opendir(filename.c_str())) {
+	closedir(dirp);
+    } else if (int fd = ::open(filename.c_str(), O_RDONLY)) {
+	if (fd>0) ::close(fd);
+    }
 }
 
 string V3Options::fileExists (const string& filename) {
@@ -1117,7 +1129,7 @@ string V3Options::parseFileArg(const string& optdir, const string& relfilename) 
 //! Utility to see if we have a language extension argument and if so add it.
 bool V3Options::parseLangExt (const char* swp, //!< argument text
 			      const char* langswp, //!< option to match
-			      const V3LangCode lc) { //!< language code
+			      const V3LangCode& lc) { //!< language code
     int len = strlen(langswp);
     if (!strncmp(swp, langswp, len)) {
 	addLangExt(swp + len, lc);
