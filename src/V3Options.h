@@ -36,6 +36,7 @@
 
 class V3OptionsImp;
 class FileLine;
+struct stat;
 
 typedef vector<string> V3StringList;
 typedef set<string> V3StringSet;
@@ -150,7 +151,7 @@ class V3Options {
     void addFuture(const string& flag);
     void addIncDirUser(const string& incdir);  // User requested
     void addIncDirFallback(const string& incdir);  // Low priority if not found otherwise
-    void addLangExt(const string &langext, const V3LangCode lc);
+    void addLangExt(const string& langext, const V3LangCode& lc);
     void addLibExtV(const string& libext);
     void optimize(int level);
     void showVersion(bool verbose);
@@ -158,7 +159,7 @@ class V3Options {
     bool onoff(const char* sw, const char* arg, bool& flag);
     bool suffixed(const char* sw, const char* arg);
     string parseFileArg(const string& optdir, const string& relfilename);
-    bool parseLangExt(const char* swp, const char* langswp, const V3LangCode lc);
+    bool parseLangExt(const char* swp, const char* langswp, const V3LangCode& lc);
     string filePathCheckOneDir(const string& modname, const string& dirname);
 
     static string getenvStr(const string& envvar, const string& defaultValue);
@@ -321,6 +322,7 @@ class V3Options {
     V3LangCode fileLanguage(const string &filename);
     static bool fileStatDir (const string& filename);
     static bool fileStatNormal (const string& filename);
+    static void fileNfsFlush(const string& filename);
 
     // METHODS (other OS)
     static void throwSigsegv();
