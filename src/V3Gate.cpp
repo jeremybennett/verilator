@@ -41,6 +41,7 @@
 #include "V3Graph.h"
 #include "V3Const.h"
 #include "V3Stats.h"
+#include "V3Hashed.h"
 
 typedef list<AstNodeVarRef*> GateVarRefList;
 
@@ -56,20 +57,32 @@ public:
 };
 
 //######################################################################
+
+class GateLogicVertex;
+class GateVarVertex;
+class GateGraphBaseVisitor {
+public:
+    virtual AstNUser* visit(GateLogicVertex* vertexp, AstNUser* vup=NULL) =0;
+    virtual AstNUser* visit(GateVarVertex* vertexp, AstNUser* vup=NULL) =0;
+};
+
+//######################################################################
 // Support classes
 
 class GateEitherVertex : public V3GraphVertex {
     AstScope*	m_scopep;
     bool	m_reducible;	// True if this node should be able to be eliminated
+    bool	m_dedupable;	// True if this node should be able to be deduped
     bool	m_consumed;		// Output goes to something meaningful
 public:
     GateEitherVertex(V3Graph* graphp, AstScope* scopep)
-	: V3GraphVertex(graphp), m_scopep(scopep), m_reducible(true), m_consumed(false) {}
+	: V3GraphVertex(graphp), m_scopep(scopep), m_reducible(true), m_dedupable(true), m_consumed(false) {}
     virtual ~GateEitherVertex() {}
-    // Accessors
+    // ACCESSORS
     virtual string dotStyle() const { return m_consumed?"":"dotted"; }
     AstScope* scopep() const { return m_scopep; }
     bool reducible() const { return m_reducible; }
+    bool dedupable() const { return m_dedupable; }
     void setConsumed(const char* consumedReason) {
 	m_consumed = true;
 	//UINFO(0,"\t\tSetConsumed "<<consumedReason<<" "<<this<<endl);
@@ -78,6 +91,23 @@ public:
     void clearReducible(const char* nonReducibleReason) {
 	m_reducible = false;
 	//UINFO(0,"     NR: "<<nonReducibleReason<<"  "<<name()<<endl);
+    }
+    void clearDedupable(const char* nonDedupableReason) {
+	m_dedupable = false;
+	//UINFO(0,"     ND: "<<nonDedupableReason<<"  "<<name()<<endl);
+    }
+    void clearReducibleAndDedupable(const char* nonReducibleReason) {
+	clearReducible(nonReducibleReason);
+	clearDedupable(nonReducibleReason);
+    }
+    virtual AstNUser* accept(GateGraphBaseVisitor& v, AstNUser* vup=NULL) =0;
+    // Returns only the result from the LAST vertex iterated over
+    AstNUser* iterateInEdges(GateGraphBaseVisitor& v, AstNUser* vup=NULL) {
+	AstNUser* retp;
+	for (V3GraphEdge* edgep = inBeginp(); edgep; edgep = edgep->inNextp()) {
+	    retp = dynamic_cast<GateEitherVertex*>(edgep->fromp())->accept(v, vup);
+	}
+	return retp;
     }
 };
 
@@ -92,7 +122,7 @@ public:
 	: GateEitherVertex(graphp, scopep), m_varScp(varScp), m_isTop(false)
 	, m_isClock(false), m_rstSyncNodep(NULL), m_rstAsyncNodep(NULL) {}
     virtual ~GateVarVertex() {}
-    // Accessors
+    // ACCESSORS
     AstVarScope* varScp() const { return m_varScp; }
     virtual string name() const { return (cvtToStr((void*)m_varScp)+" "+varScp()->name()); }
     virtual string dotColor() const { return "blue"; }
@@ -104,6 +134,16 @@ public:
     void rstSyncNodep(AstNode* nodep) { m_rstSyncNodep=nodep; }
     AstNode* rstAsyncNodep() const { return m_rstAsyncNodep; }
     void rstAsyncNodep(AstNode* nodep) { m_rstAsyncNodep=nodep; }
+    // METHODS
+    void propagateAttrClocksFrom(GateVarVertex* fromp) {
+	// Propagate clock and general attribute onto this node
+	varScp()->varp()->propagateAttrFrom(fromp->varScp()->varp());
+	if (fromp->isClock()) {
+	    varScp()->varp()->usedClock(true);
+	    setIsClock();
+	}
+    }
+    AstNUser* accept(GateGraphBaseVisitor& v, AstNUser* vup=NULL) { return v.visit(this,vup); }
 };
 
 class GateLogicVertex : public GateEitherVertex {
@@ -114,12 +154,13 @@ public:
     GateLogicVertex(V3Graph* graphp, AstScope* scopep, AstNode* nodep, AstActive* activep, bool slow)
 	: GateEitherVertex(graphp,scopep), m_nodep(nodep), m_activep(activep), m_slow(slow) {}
     virtual ~GateLogicVertex() {}
-    // Accessors
+    // ACCESSORS
     virtual string name() const { return (cvtToStr((void*)m_nodep)+"@"+scopep()->prettyName()); }
     virtual string dotColor() const { return "yellow"; }
     AstNode* nodep() const { return m_nodep; }
     AstActive* activep() const { return m_activep; }
     bool	slow() const { return m_slow; }
+    AstNUser* accept(GateGraphBaseVisitor& v, AstNUser* vup=NULL) { return v.visit(this,vup); }
 };
 
 //######################################################################
@@ -134,6 +175,7 @@ private:
     // STATE
     bool		m_buffersOnly;	// Set when we only allow simple buffering, no equations (for clocks)
     AstNodeVarRef*	m_lhsVarRef;	// VarRef on lhs of assignment (what we're replacing)
+    bool		m_dedupe;	// Set when we use isGateDedupable instead of isGateOptimizable
 
     // METHODS
     void clearSimple(const char* because) {
@@ -193,7 +235,7 @@ private:
     virtual void visit(AstNode* nodep, AstNUser*) {
 	// *** Special iterator
 	if (!m_isSimple) return;	// Fastpath
-	if (!nodep->isGateOptimizable()
+	if (!(m_dedupe ? nodep->isGateDedupable() : nodep->isGateOptimizable())
 	    || !nodep->isPure()
 	    || nodep->isBrancher()) {
 	    UINFO(5, "Non optimizable type: "<<nodep<<endl);
@@ -203,11 +245,12 @@ private:
     }
 public:
     // CONSTUCTORS
-    GateOkVisitor(AstNode* nodep, bool buffersOnly) {
+    GateOkVisitor(AstNode* nodep, bool buffersOnly, bool dedupe) {
 	m_isSimple = true;
 	m_substTreep = NULL;
 	m_buffersOnly = buffersOnly;
 	m_lhsVarRef = NULL;
+	m_dedupe = dedupe;
 	// Iterate
 	nodep->accept(*this);
 	// Check results
@@ -258,6 +301,7 @@ private:
     bool		m_inSlow;	// Inside a slow structure
     V3Double0		m_statSigs;	// Statistic tracking
     V3Double0		m_statRefs;	// Statistic tracking
+    V3Double0		m_statDedupLogic;	// Statistic tracking
 
     // METHODS
     void iterateNewStmt(AstNode* nodep, const char* nonReducibleReason, const char* consumeReason) {
@@ -265,9 +309,10 @@ private:
 	    UINFO(4,"   STMT "<<nodep<<endl);
 	    // m_activep is null under AstCFunc's, that's ok.
 	    m_logicVertexp = new GateLogicVertex(&m_graph, m_scopep, nodep, m_activep, m_inSlow);
-	    if (!m_activeReducible) nonReducibleReason="Block Unreducible";
 	    if (nonReducibleReason) {
-		m_logicVertexp->clearReducible(nonReducibleReason);
+		m_logicVertexp->clearReducibleAndDedupable(nonReducibleReason);
+	    } else if (!m_activeReducible) {
+		m_logicVertexp->clearReducible("Block Unreducible");  // Sequential logic is dedupable
 	    }
 	    if (consumeReason) m_logicVertexp->setConsumed(consumeReason);
 	    if (nodep->castSenItem()) m_logicVertexp->setConsumed("senItem");
@@ -284,13 +329,13 @@ private:
 	    varscp->user1p(vertexp);
 	    if (varscp->varp()->isSigPublic()) {
 		// Public signals shouldn't be changed, pli code might be messing with them
-		vertexp->clearReducible("SigPublic");
+		vertexp->clearReducibleAndDedupable("SigPublic");
 		vertexp->setConsumed("SigPublic");
 	    }
 	    if (varscp->varp()->isIO() && varscp->scopep()->isTop()) {
 		// We may need to convert to/from sysc/reg sigs
 		vertexp->setIsTop();
-		vertexp->clearReducible("isTop");
+		vertexp->clearReducibleAndDedupable("isTop");
 		vertexp->setConsumed("isTop");
 	    }
 	    if (varscp->varp()->isUsedClock()) 	vertexp->setConsumed("clock");
@@ -305,6 +350,7 @@ private:
     void consumedMarkRecurse(GateEitherVertex* vertexp);
     void consumedMove();
     void replaceAssigns();
+    void dedupe();
 
     // VISITORS
     virtual void visit(AstNetlist* nodep, AstNUser*) {
@@ -319,6 +365,8 @@ private:
 	optimizeSignals(false);
 	// Then propagate more complicated equations
 	optimizeSignals(true);
+	// Remove redundant logic
+	if (v3Global.opt.oDedupe()) dedupe();
 	// Warn
 	warnSignals();
 	consumedMark();
@@ -443,6 +491,7 @@ private:
 public:
     // CONSTUCTORS
     GateVisitor(AstNode* nodep) {
+	AstNode::user1ClearTree();
 	m_logicVertexp = NULL;
 	m_scopep = NULL;
 	m_modp = NULL;
@@ -455,6 +504,7 @@ public:
     virtual ~GateVisitor() {
 	V3Stats::addStat("Optimizations, Gate sigs deleted", m_statSigs);
 	V3Stats::addStat("Optimizations, Gate inputs replaced", m_statRefs);
+	V3Stats::addStat("Optimizations, Gate sigs deduped", m_statDedupLogic);
     }
 };
 
@@ -464,7 +514,7 @@ void GateVisitor::optimizeSignals(bool allowMultiIn) {
     for (V3GraphVertex* itp = m_graph.verticesBeginp(); itp; itp=itp->verticesNextp()) {
 	if (GateVarVertex* vvertexp = dynamic_cast<GateVarVertex*>(itp)) {
 	    if (vvertexp->inEmpty()) {
-		vvertexp->clearReducible("inEmpty");	// Can't deal with no sources
+		vvertexp->clearReducibleAndDedupable("inEmpty");	// Can't deal with no sources
 		if (!vvertexp->isTop()		// Ok if top inputs are driverless
 		    && !vvertexp->varScp()->varp()->valuep()
 		    && !vvertexp->varScp()->varp()->isSigPublic()) {
@@ -480,7 +530,7 @@ void GateVisitor::optimizeSignals(bool allowMultiIn) {
 		}
 	    }
 	    else if (!vvertexp->inSize1()) {
-		vvertexp->clearReducible("size!1");	// Can't deal with more than one src
+		vvertexp->clearReducibleAndDedupable("size!1");	// Can't deal with more than one src
 	    }
 	    // Reduce it?
 	    if (!vvertexp->reducible()) {
@@ -493,7 +543,7 @@ void GateVisitor::optimizeSignals(bool allowMultiIn) {
 		AstNode* logicp = logicVertexp->nodep();
 		if (logicVertexp->reducible()) {
 		    // Can we eliminate?
-		    GateOkVisitor okVisitor(logicp, vvertexp->isClock());
+		    GateOkVisitor okVisitor(logicp, vvertexp->isClock(), false);
 		    bool multiInputs = okVisitor.rhsVarRefs().size() > 1;
 		    // Was it ok?
 		    bool doit = okVisitor.isSimple();
@@ -548,12 +598,8 @@ void GateVisitor::optimizeSignals(bool allowMultiIn) {
 				UINFO(9,"         Point-to-new vertex "<<newvarscp<<endl);
 				GateVarVertex* varvertexp = makeVarVertex(newvarscp);
 				new V3GraphEdge(&m_graph, varvertexp, consumeVertexp, 1);
-				newvarscp->varp()->propagateAttrFrom(vvertexp->varScp()->varp());
-				if (vvertexp->isClock()) {
-				    // Propagate clock attribute onto generating node
-				    newvarscp->varp()->usedClock(true);
-				    varvertexp->setIsClock();
-				}
+				// Propagate clock attribute onto generating node
+				varvertexp->propagateAttrClocksFrom(vvertexp);
 			    }
 			    // Remove the edge
 			    edgep->unlinkDelete(); edgep=NULL;
@@ -725,6 +771,8 @@ private:
 	    // However a VARREF should point to the original as it's otherwise confusing
 	    // to throw warnings that point to a PIN rather than where the pin us used.
 	    if (substp->castVarRef()) substp->fileline(nodep->fileline());
+	    // Make the substp an rvalue like nodep. This facilitate the hashing in dedupe.
+	    if (AstNodeVarRef* varrefp = substp->castNodeVarRef()) varrefp->lvalue(false);
 	    nodep->replaceWith(substp);
 	    nodep->deleteTree(); nodep=NULL;
 	}
@@ -754,6 +802,258 @@ void GateVisitor::optimizeElimVar(AstVarScope* varscp, AstNode* substp, AstNode*
 	consumerp = V3Const::constifyEdit(consumerp);
 	if (debug()>=5) consumerp->dumpTree(cout,"\telimUseDne: ");
     }
+}
+
+//######################################################################
+// Auxiliary hash class for GateDedupeVarVisitor
+
+class GateDedupeHash : public V3HashedUserCheck {
+private:
+    // NODE STATE
+    // Ast*::user2p	-> parent AstNodeAssign* for this rhsp
+    // Ast*::user3p	-> AstNode* checked in test for duplicate
+    // Ast*::user5p	-> AstNode* checked in test for duplicate
+    // AstUser2InUse	m_inuser2;	(Allocated for use in GateVisitor)
+    AstUser3InUse	m_inuser3;
+    AstUser5InUse	m_inuser5;
+    V3Hashed		m_hashed;	// Hash, contains rhs of assigns
+
+    void hash(AstNode* nodep) {
+	// !NULL && the object is hashable
+	if (nodep && !nodep->sameHash().isIllegal()) {
+	    m_hashed.hash(nodep);
+	}
+    }
+    bool sameHash(AstNode* node1p, AstNode* node2p) {
+	return (node1p && node2p
+		&& !node1p->sameHash().isIllegal()
+		&& !node2p->sameHash().isIllegal()
+		&& m_hashed.sameNodes(node1p,node2p));
+    }
+    bool same(AstNUser* node1p, AstNUser* node2p) {
+	return node1p == node2p || sameHash((AstNode*)node1p,(AstNode*)node2p);
+    }
+public:
+    bool check(AstNode* node1p,AstNode* node2p)  {
+	return same(node1p->user3p(),node2p->user3p()) && same(node1p->user5p(),node2p->user5p())
+	    && node1p->user2p()->castNode()->type() == node2p->user2p()->castNode()->type()
+	    ;
+    }
+
+    AstNodeAssign* hashAndFindDupe(AstNodeAssign* assignp, AstNode* extra1p, AstNode* extra2p) {
+	AstNode *rhsp = assignp->rhsp();
+	rhsp->user2p(assignp);
+	rhsp->user3p(extra1p);
+	rhsp->user5p(extra2p);
+
+	hash(extra1p);
+	hash(extra2p);
+
+	V3Hashed::iterator inserted = m_hashed.hashAndInsert(rhsp);
+	V3Hashed::iterator dupit = m_hashed.findDuplicate(rhsp, this);
+	// Even though rhsp was just inserted, V3Hashed::findDuplicate doesn't
+	// return anything in the hash that has the same pointer (V3Hashed.cpp::findDuplicate)
+	// So dupit is either a different, duplicate rhsp, or the end of the hash.
+	if (dupit != m_hashed.end()) {
+	    m_hashed.erase(inserted);
+	    return m_hashed.iteratorNodep(dupit)->user2p()->castNode()->castNodeAssign();
+	}
+	return NULL;
+    }
+};
+
+//######################################################################
+// Have we seen the rhs of this assign before?
+
+class GateDedupeVarVisitor : public GateBaseVisitor {
+    // Given a node, it is visited to try to find the AstNodeAssign under it that can used for dedupe.
+    // Right now, only the following node trees are supported for dedupe.
+    // 1. AstNodeAssign
+    // 2. AstAlways -> AstNodeAssign
+    //   (Note, the assign must also be the only node under the always)
+    // 3. AstAlways -> AstNodeIf -> AstNodeAssign
+    //   (Note, the IF must be the only node under the always,
+    //    and the assign must be the only node under the if, other than the ifcond)
+    // Any other ordering or node type, except for an AstComment, makes it not dedupable
+private:
+    // STATE
+    GateDedupeHash	m_hash;			// Hash used to find dupes of rhs of assign
+    AstNodeAssign*	m_assignp;		// Assign found for dedupe
+    AstNode*		m_ifCondp;		// IF condition that assign is under
+    bool		m_always;		// Assign is under an always
+    bool		m_dedupable;		// Determined the assign to be dedupable
+
+    // VISITORS
+    virtual void visit(AstNodeAssign* assignp, AstNUser*) {
+	if (m_dedupable) {
+	    // I think we could safely dedupe an always block with multiple non-blocking statements, but erring on side of caution here
+	    if (!m_assignp) {
+		m_assignp = assignp;
+	    } else {
+		m_dedupable = false;
+	    }
+	}
+    }
+    virtual void visit(AstAlways* alwaysp, AstNUser*) {
+	if (m_dedupable) {
+	    if (!m_always) {
+		m_always = true;
+		alwaysp->bodysp()->iterateAndNext(*this);
+	    } else {
+		m_dedupable = false;
+	    }
+	}
+    }
+    // Ugly support for latches of the specific form -
+    //  always @(...)
+    //    if (...)
+    //       foo = ...; // or foo <= ...;
+    virtual void visit(AstNodeIf* ifp, AstNUser*) {
+	if (m_dedupable) {
+	    if (m_always && !m_ifCondp && !ifp->elsesp()) {  //we're under an always, this is the first IF,  and there's no else
+		m_ifCondp = ifp->condp();
+		ifp->ifsp()->iterateAndNext(*this);
+	    } else {
+		m_dedupable = false;
+	    }
+	}
+    }
+
+    virtual void visit(AstComment*, AstNUser*) {}  // NOP
+    //--------------------
+    // Default
+    virtual void visit(AstNode*, AstNUser*) {
+	m_dedupable = false;
+    }
+
+public:
+    // CONSTUCTORS
+    GateDedupeVarVisitor() {}
+    // PUBLIC METHODS
+    AstNodeVarRef* findDupe(AstNode* nodep, AstVarScope* consumerVarScopep, AstActive* activep) {
+	m_assignp = NULL;
+	m_ifCondp = NULL;
+	m_always = false;
+	m_dedupable = true;
+	nodep->accept(*this);
+	if (m_dedupable && m_assignp) {
+	    AstNode* lhsp = m_assignp->lhsp();
+	    // Possible todo, handle more complex lhs expressions
+	    if (AstNodeVarRef* lhsVarRefp = lhsp->castNodeVarRef()) {
+		if (lhsVarRefp->varScopep() != consumerVarScopep) consumerVarScopep->v3fatalSrc("Consumer doesn't match lhs of assign");
+		if (AstNodeAssign* dup =  m_hash.hashAndFindDupe(m_assignp,activep,m_ifCondp)) {
+		    return (AstNodeVarRef*) dup->lhsp();
+		}
+	    }
+	}
+	return NULL;
+    }
+};
+
+//######################################################################
+// Recurse through the graph, looking for duplicate expressions on the rhs of an assign
+
+class GateDedupeGraphVisitor : public GateGraphBaseVisitor {
+private:
+    // NODE STATE
+    // AstVarScope::user2p	-> bool: already visited
+    // AstUser2InUse		m_inuser2;	(Allocated for use in GateVisitor)
+    V3Double0			m_numDeduped;	// Statistic tracking
+    GateDedupeVarVisitor	m_varVisitor;	// Looks for a dupe of the logic
+
+    virtual AstNUser* visit(GateVarVertex *vvertexp, AstNUser*) {
+	// Check that we haven't been here before
+	if (vvertexp->varScp()->user2()) return NULL;
+	vvertexp->varScp()->user2(true);
+
+	AstNodeVarRef* dupVarRefp = (AstNodeVarRef*) vvertexp->iterateInEdges(*this, (AstNUser*) vvertexp);
+
+	if (dupVarRefp && vvertexp->inSize1()) {
+	    V3GraphEdge* edgep = vvertexp->inBeginp();
+	    GateLogicVertex* lvertexp = (GateLogicVertex*)edgep->fromp();
+	    if (!vvertexp->dedupable()) vvertexp->varScp()->v3fatalSrc("GateLogicVertex* visit should have returned NULL if consumer var vertex is not dedupable.");
+	    GateOkVisitor okVisitor(lvertexp->nodep(), false, true);
+	    if (okVisitor.isSimple()) {
+		AstVarScope* dupVarScopep = dupVarRefp->varScopep();
+		GateVarVertex* dupVvertexp = (GateVarVertex*) (dupVarScopep->user1p());
+		UINFO(4,"replacing " << vvertexp << " with " << dupVvertexp << endl);
+		m_numDeduped++;
+		// Replace all of this varvertex's consumers with dupVarRefp
+		for (V3GraphEdge* outedgep = vvertexp->outBeginp();outedgep;) {
+		    GateLogicVertex* consumeVertexp = dynamic_cast<GateLogicVertex*>(outedgep->top());
+		    AstNode* consumerp = consumeVertexp->nodep();
+		    GateElimVisitor elimVisitor(consumerp,vvertexp->varScp(),dupVarRefp);
+		    outedgep = outedgep->relinkFromp(dupVvertexp);
+		}
+
+		// Propogate attributes
+		dupVvertexp->propagateAttrClocksFrom(vvertexp);
+
+		// Remove inputs links
+		while (V3GraphEdge* inedgep = vvertexp->inBeginp()) {
+		    inedgep->unlinkDelete(); inedgep=NULL;
+		}
+		// replaceAssigns() does the deleteTree on lvertexNodep in a later step
+		AstNode* lvertexNodep = lvertexp->nodep();
+		lvertexNodep->unlinkFrBack();
+		vvertexp->varScp()->valuep(lvertexNodep);
+		lvertexNodep = NULL;
+		vvertexp->user(true);
+		lvertexp->user(true);
+	    }
+	}
+
+	return NULL;
+    }
+
+    // Returns a varref that has the same logic input
+    virtual AstNUser* visit(GateLogicVertex* lvertexp, AstNUser* vup) {
+	lvertexp->iterateInEdges(*this);
+
+	GateVarVertex* consumerVvertexpp = (GateVarVertex*) vup;
+	if (lvertexp->dedupable() && consumerVvertexpp->dedupable()) {
+	    AstNode* nodep = lvertexp->nodep();
+	    AstVarScope* consumerVarScopep = consumerVvertexpp->varScp();
+	    // TODO: Doing a simple pointer comparison of  activep won't work
+	    // optimally for statements under generated clocks. Statements under
+	    // different generated clocks will never compare as equal, even if the
+	    // generated clocks are deduped into one clock.
+	    AstActive* activep = lvertexp->activep();
+	    return (AstNUser*) m_varVisitor.findDupe(nodep, consumerVarScopep, activep);
+	}
+	return NULL;
+    }
+
+public:
+    GateDedupeGraphVisitor() {}
+    void dedupeTree(GateVarVertex* vvertexp) {
+	vvertexp->accept(*this);
+    }
+    V3Double0 numDeduped() { return m_numDeduped; }
+};
+
+//----------------------------------------------------------------------
+
+void GateVisitor::dedupe() {
+    AstNode::user2ClearTree();
+    GateDedupeGraphVisitor deduper;
+    // Traverse starting from each of the clocks
+    for (V3GraphVertex* itp = m_graph.verticesBeginp(); itp; itp=itp->verticesNextp()) {
+	if (GateVarVertex* vvertexp = dynamic_cast<GateVarVertex*>(itp)) {
+	    if (vvertexp->isClock()) {
+		deduper.dedupeTree(vvertexp);
+	    }
+	}
+    }
+    // Traverse starting from each of the outputs
+    for (V3GraphVertex* itp = m_graph.verticesBeginp(); itp; itp=itp->verticesNextp()) {
+	if (GateVarVertex* vvertexp = dynamic_cast<GateVarVertex*>(itp)) {
+	    if (vvertexp->isTop() && vvertexp->varScp()->varp()->isOutput()) {
+		deduper.dedupeTree(vvertexp);
+	    }
+	}
+    }
+    m_statDedupLogic += deduper.numDeduped();
 }
 
 //######################################################################
