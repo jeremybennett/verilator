@@ -7,14 +7,16 @@ if (!$::Driver) { use FindBin; exec("$FindBin::Bin/bootstrap.pl", @ARGV, $0); di
 # Lesser General Public License Version 3 or the Perl Artistic License
 # Version 2.0.
 
+top_filename("t/t_inst_dtree.v");
+
 compile (
-	 fails=>$Self->{v3},
-	 expect=>
-'%Error: t/t_tri_pull2_bad.v:\d+: Unsupported: Conflicting pull directions.
-%Error: t/t_tri_pull2_bad.v:\d+: ... Location of conflicting pull.
-%Error: Exiting due to',
+    v_flags2 => ['+define+INLINE_B +define+INLINE_C'],
+    verilator_flags2 => ['-trace'],
+    );
+
+execute (
+    check_finished=>1,
     );
 
 ok(1);
 1;
-
