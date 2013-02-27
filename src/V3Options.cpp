@@ -673,14 +673,15 @@ void V3Options::parseOptsList(FileLine* fl, const string& optdir, int argc, char
 	    else if ( !strncmp (sw, "+incdir+", 8)) {
 		addIncDirUser (parseFileArg(optdir, string (sw+strlen("+incdir+"))));
 	    }
-	    else if (parseLangExt(sw, "+systemverilogext+", V3LangCode::L1800_2009)
+	    else if (parseLangExt(sw, "+systemverilogext+", V3LangCode::L1800_2012)
 		     || parseLangExt(sw, "+verilog1995ext+", V3LangCode::L1364_1995)
 		     || parseLangExt(sw, "+verilog2001ext+", V3LangCode::L1364_2001)
 		     || parseLangExt(sw, "+1364-1995ext+", V3LangCode::L1364_1995)
 		     || parseLangExt(sw, "+1364-2001ext+", V3LangCode::L1364_2001)
 		     || parseLangExt(sw, "+1364-2005ext+", V3LangCode::L1364_2005)
 		     || parseLangExt(sw, "+1800-2005ext+", V3LangCode::L1800_2005)
-		     || parseLangExt(sw, "+1800-2009ext+", V3LangCode::L1800_2009)) {
+		     || parseLangExt(sw, "+1800-2009ext+", V3LangCode::L1800_2009)
+		     || parseLangExt(sw, "+1800-2012ext+", V3LangCode::L1800_2012)) {
 		// Nothing to do here - all done in the test
 
 	    }
@@ -741,6 +742,7 @@ void V3Options::parseOptsList(FileLine* fl, const string& optdir, int argc, char
 	    else if ( onoff   (sw, "-profile-cfuncs", flag/*ref*/) )	{ m_profileCFuncs = flag; }
 	    else if ( onoff   (sw, "-psl", flag/*ref*/) )		{ m_psl = flag; }
 	    else if ( onoff   (sw, "-public", flag/*ref*/) )		{ m_public = flag; }
+	    else if ( onoff   (sw, "-report-unoptflat", flag/*ref*/) )	{ m_reportUnoptflat = flag; }
 	    else if ( onoff   (sw, "-savable", flag/*ref*/) )		{ m_savable = flag; }
 	    else if ( !strcmp (sw, "-sc") )				{ m_outFormatOk = true; m_systemC = true; m_systemPerl = false; }
 	    else if ( onoff   (sw, "-skip-identical", flag/*ref*/) )	{ m_skipIdentical = flag; }
@@ -1213,6 +1215,7 @@ V3Options::V3Options() {
     m_traceDups = false;
     m_traceUnderscore = false;
     m_underlineZero = false;
+    m_reportUnoptflat = false;
     m_xInitialEdge = false;
     m_xmlOnly = false;
 
