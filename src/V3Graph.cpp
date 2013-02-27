@@ -39,9 +39,14 @@ int V3Graph::debug() { return max(V3Error::debugDefault(), s_debug); }
 //######################################################################
 // Vertices
 
+V3GraphVertex::V3GraphVertex(V3Graph* graphp, const V3GraphVertex& old)
+    : m_fanout(old.m_fanout), m_color(old.m_color), m_rank(old.m_rank) {
+    m_userp = NULL;
+    verticesPushBack(graphp);
+}
+
 V3GraphVertex::V3GraphVertex(V3Graph* graphp)
-    : m_fanout(0), m_color(0), m_rank(0)
-{
+    : m_fanout(0), m_color(0), m_rank(0) {
     m_userp = NULL;
     verticesPushBack(graphp);
 }
@@ -125,9 +130,9 @@ ostream& operator<<(ostream& os, V3GraphVertex* vertexp) {
 //######################################################################
 // Edges
 
-V3GraphEdge::V3GraphEdge(V3Graph* graphp,
-			 V3GraphVertex* fromp, V3GraphVertex* top, int weight,
-			 bool cutable) {
+void V3GraphEdge::init(V3Graph* graphp,
+		       V3GraphVertex* fromp, V3GraphVertex* top, int weight,
+		       bool cutable) {
     UASSERT(fromp, "Null from pointer\n");
     UASSERT(top, "Null to pointer\n");
     m_fromp = fromp;
@@ -273,6 +278,11 @@ void V3Graph::dumpDotFilePrefixed(const string& nameComment, bool colorAsSubgrap
     if (v3Global.opt.dumpTree()) {
 	dumpDotFile(v3Global.debugFilename(nameComment)+".dot", colorAsSubgraph);
     }
+}
+
+//! Variant of dumpDotFilePrefixed without --dump option check
+void V3Graph::dumpDotFilePrefixedAlways(const string& nameComment, bool colorAsSubgraph) {
+    dumpDotFile(v3Global.debugFilename(nameComment)+".dot", colorAsSubgraph);
 }
 
 void V3Graph::dumpDotFile(const string& filename, bool colorAsSubgraph) {
