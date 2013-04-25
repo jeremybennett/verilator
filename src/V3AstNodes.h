@@ -1675,8 +1675,13 @@ struct AstAssign : public AstNodeAssign {
 
 struct AstAssignAlias : public AstNodeAssign {
     // Like AstAssignW, but a true bidirect interconnection alias
-    // If both sides are wires, there's no LHS vs RHS,
-    AstAssignAlias(FileLine* fileline, AstVarRef* lhsp, AstVarRef* rhsp)
+    // If both sides are wires, there's no LHS vs RHS.
+    // Used in two places in Verilator: 1) to connect pins of cells to the
+    // vars used within those cells and 2) to implement the IEEE 1800 network
+    // alias keyword. In the former case the arguments are AstVarRefs, but in
+    // the latter we may have concatenation/selections on either side, so the
+    // arguments are AstNodes.
+    AstAssignAlias(FileLine* fileline, AstNode* lhsp, AstNode* rhsp)
 	: AstNodeAssign(fileline, lhsp, rhsp) {}
     ASTNODE_NODE_FUNCS(AssignAlias, ASSIGNALIAS)
     virtual AstNode* cloneType(AstNode* lhsp, AstNode* rhsp) { V3ERROR_NA; return NULL; }

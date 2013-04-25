@@ -272,6 +272,7 @@ class AstSenTree;
 // for example yP_ for punctuation based operators.
 // Double underscores "yX__Y" means token X followed by Y,
 // and "yX__ETC" means X folled by everything but Y(s).
+%token<fl>		yALIAS		"alias"
 %token<fl>		yALWAYS		"always"
 %token<fl>		yAND		"and"
 %token<fl>		yASSERT		"assert"
@@ -1543,8 +1544,7 @@ module_common_item<nodep>:	// ==IEEE: module_common_item
 	|	concurrent_assertion_item		{ $$ = $1; }
 	|	bind_directive				{ $$ = $1; }
 	|	continuous_assign			{ $$ = $1; }
-	//			// IEEE: net_alias
-	//UNSUP	yALIAS variable_lvalue aliasEqList ';'	{ UNSUP }
+	|	net_alias				{ $$ = $1; }
 	|	initial_construct			{ $$ = $1; }
 	|	final_construct				{ $$ = $1; }
 	//			// IEEE: always_construct
@@ -1561,6 +1561,10 @@ module_common_item<nodep>:	// ==IEEE: module_common_item
 continuous_assign<nodep>:	// IEEE: continuous_assign
 		yASSIGN delayE assignList ';'		{ $$ = $3; }
 	//UNSUP: strengthSpecE not in above assign
+	;
+
+net_alias<nodep>:		// IEEE 1800: net_alias
+		yALIAS aliasEqList ';'			{ $$ = $2; }
 	;
 
 initial_construct<nodep>:	// IEEE: initial_construct
@@ -1736,6 +1740,11 @@ assignList<nodep>:
 
 assignOne<nodep>:
 		variable_lvalue '=' expr		{ $$ = new AstAssignW($2,$1,$3); }
+	;
+
+aliasEqList<nodep>:
+		variable_lvalue	'=' variable_lvalue	{ $$ = new AstAssignAlias($2,$1,$3); }
+	|	aliasEqList '=' variable_lvalue		{ $$ = $1->addNext(new AstAssignAlias($2,$1->castAssignAlias()->rhsp(),$3)); }
 	;
 
 delayE:

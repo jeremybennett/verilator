@@ -226,6 +226,7 @@ word	[a-zA-Z0-9_]+
   "$width"		{ FL; return yaTIMINGSPEC; }
   "$write"		{ FL; return yD_WRITE; }
   /*     Keywords */
+  "alias"		{ FL; return yALIAS; }
   "always"		{ FL; return yALWAYS; }
   "and"			{ FL; return yAND; }
   "assign"		{ FL; return yASSIGN; }
@@ -449,7 +450,6 @@ word	[a-zA-Z0-9_]+
   /*     Generic unsupported warnings */
   /* Note assert_strobe was in SystemVerilog 3.1, but removed for SystemVerilog 2005 */
   "$root"		{ yyerrorf("Unsupported: SystemVerilog 2005 reserved word not implemented: %s",yytext); }
-  "alias"		{ yyerrorf("Unsupported: SystemVerilog 2005 reserved word not implemented: %s",yytext); }
   "bins"		{ yyerrorf("Unsupported: SystemVerilog 2005 reserved word not implemented: %s",yytext); }
   "binsof"		{ yyerrorf("Unsupported: SystemVerilog 2005 reserved word not implemented: %s",yytext); }
   "class"		{ yyerrorf("Unsupported: SystemVerilog 2005 reserved word not implemented: %s",yytext); }
