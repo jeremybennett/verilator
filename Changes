@@ -3,17 +3,21 @@ Revision history for Verilator
 The contributors that suggested a given feature are shown in [].  [by ...]
 indicates the contributor was also the author of the fix; Thanks!
 
-* Verilator 3.847 devel
+* Verilator 3.847 2013-05-11
 
-***  Add ALWCOMBORDER warning.  [KC Buckenmaier]
-
-***  Add --pins-sc-uint and --pins-sc-biguint, bug638. [Alex Hornung]
-
-**** Support "signal[vec]++".
-
-**** Fix simulation error when inputs and MULTIDRIVEN, bug634. [Ted Campbell]
-
-**** Fix module resolution with __, bug631. [Jason McMullan]
+***   Add ALWCOMBORDER warning.  [KC Buckenmaier]
+      
+***   Add --pins-sc-uint and --pins-sc-biguint, bug638. [Alex Hornung]
+      
+****  Support "signal[vec]++".
+      
+****  Fix simulation error when inputs and MULTIDRIVEN, bug634. [Ted Campbell]
+      
+****  Fix module resolution with __, bug631. [Jason McMullan]
+      
+****  Fix packed array non-zero right index select crash, bug642. [Krzysztof Jankowski]
+      
+****  Fix nested union crash, bug643. [Krzysztof Jankowski]
 
 
 * Verilator 3.846 2013-03-09
