@@ -861,29 +861,49 @@ sub _run {
     print "   > $param{logfile}" if $param{logfile};
     print "\n";
 
-    if ($param{logfile}) {
-	open(SAVEOUT, ">&STDOUT") or die "%Error: Can't dup stdout";
-	open(SAVEERR, ">&STDERR") or die "%Error: Can't dup stderr";
-	if (0) {close(SAVEOUT); close(SAVEERR);}	# Prevent unused warning
-	if ($param{tee}) {
-	    open(STDOUT, "|tee $param{logfile}") or die "%Error: Can't redirect stdout";
-	} else {
-	    open(STDOUT, ">$param{logfile}") or die "%Error: Can't open $param{logfile}";
+    # Execute command redirecting output, keeping order between stderr and stdout.
+    # Must do low-level IO so GCC interaction works (can't be line-based)
+    my $status;
+    {
+	pipe(PARENTRD, CHILDWR) or die "%Error: Can't Pipe, stopped";
+	autoflush PARENTRD 1;
+	autoflush CHILDWR 1;
+	my $logfh;
+	if ($param{logfile}) {
+	    $logfh = IO::File->new(">$param{logfile}") or die "%Error: Can't open $param{logfile}";
 	}
-	open(STDERR, ">&STDOUT") or die "%Error: Can't dup stdout";
-	autoflush STDOUT 1;
-	autoflush STDERR 1;
+	my $pid=fork();
+	if ($pid) { # Parent
+	    close CHILDWR;
+	    while (1) {
+		my $buf = '';
+		my $got = sysread PARENTRD,$buf,10000;
+		last if $got==0;
+		print $buf if $param{tee};
+		print $logfh $buf if $logfh;
+	    }
+	    close PARENTRD;
+	    close $logfh if $logfh;
+	}
+	else { # Child
+	    close PARENTRD;
+	    close $logfh if $logfh;
+	    # Reset signals
+	    $SIG{ALRM} = 'DEFAULT';
+	    $SIG{CHLD} = 'DEFAULT';
+	    # Logging
+	    open(STDOUT, ">&CHILDWR") or croak "%Error: Can't redirect stdout, stopped";
+	    open(STDERR, ">&STDOUT") or croak "%Error: Can't dup stdout, stopped";
+	    autoflush STDOUT 1;
+	    autoflush STDERR 1;
+	    system "$command";
+	    exit ($? ? 10 : 0);  # $?<<8 misses coredumps
+	}
+	waitpid($pid,0);
+	$status = $? || 0;
     }
-
-    system "$command";
-    my $status = $?;
     flush STDOUT;
     flush STDERR;
-
-    if ($param{logfile}) {
-	open (STDOUT, ">&SAVEOUT");
-	open (STDERR, ">&SAVEERR");
-    }
 
     if (!$param{fails} && $status) {
 	$self->error("Exec of $param{cmd}[0] failed\n");
@@ -1277,14 +1297,23 @@ sub _read_inputs_v {
     my $filename = $self->top_filename;
     $filename = "$self->{t_dir}/$filename" if !-r $filename;
     my $fh = IO::File->new("<$filename") or die "%Error: $! $filename,";
+    my $get_sigs=1;
+    my %inputs;
     while (defined(my $line = $fh->getline)) {
-	if ($line =~ /^\s*input\s*(\S+)\s*(\/[^\/]+\/|)\s*;/) {
-	    $self->{inputs}{$1} = $1;
+	if ($get_sigs) {
+	    if ($line =~ /^\s*input\s*(\S+)\s*(\/[^\/]+\/|)\s*;/) {
+		$inputs{$1} = $1;
+	    }
+	    if ($line =~ /^\s*(function|task|endmodule)/) {
+		$get_sigs = 0;
+	    }
 	}
-	if ($line =~ /^\s*(function|task|endmodule)/) {
-	    last;
+	if ($line =~ /^\s*module\s+t\b/) { # Ignore any earlier inputs; Module 't' has precedence
+	    %inputs = ();
+	    $get_sigs = 1;
 	}
     }
+    $self->{inputs}{$_} = $inputs{$_} foreach keys %inputs;
     $fh->close();
 }
 
