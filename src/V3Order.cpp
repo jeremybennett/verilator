@@ -252,7 +252,7 @@ private:
     //   Entire Netlist:
     //    AstVarScope::user1p	-> OrderUser* for usage var
     //    {statement}Node::user1p-> AstModule* statement is under
-    //   USER4 Cleared on each Logic stmt
+    //   USER4 Cleared on each Logic stmt (always blocks, assignments)
     //    AstVarScope::user4()	-> VarUsage(gen/con/both).	Where already encountered signal
     // Ordering (user3/4/5 cleared between forming and ordering)
     //	  AstScope::user1p()	-> AstNodeModule*. Module this scope is under
@@ -600,105 +600,243 @@ private:
 	}
     }
     virtual void visit(AstNodeVarRef* nodep, AstNUser*) {
+	// Only bother about variable references that are under some scope.
+	UINFO(5, "   visiting AstNodeVarRef " << nodep << endl);
 	if (m_scopep) {
 	    AstVarScope* varscp = nodep->varScopep();
-	    if (!varscp) nodep->v3fatalSrc("Var didn't get varscoped in V3Scope.cpp\n");
+	    UINFO(6, "    VARSCOPE is " << varscp << endl);
+	    if (!varscp)
+		nodep->v3fatalSrc("Var didn't get varscoped in V3Scope.cpp\n");
 	    if (m_inSenTree) {
-		// Add CLOCK dependency... This is a root of the tree we'll trace
-		if (nodep->lvalue()) nodep->v3fatalSrc("How can a sensitivity be setting a var?\n");
+		// Add CLOCK dependency... This is a root of the tree we'll
+		// trace
+		UINFO(7, "     in SENTREE" << endl);
+		if (nodep->lvalue())
+		    nodep->v3fatalSrc("How can sensitivity be setting var?\n");
+		// Use a STD vertex for the clock sensitivity.
 		OrderVarVertex* varVxp = newVarUserVertex(varscp, WV_STD);
 		varVxp->isClock(true);
+		// Make an edge from this variable's vertex to the Activation
+		// block (AstActive) of the AstSenTree logic vertex it sits
+		// under. The WEIGHT_MEDIUM is irrelevant, it just make the
+		// DOT graph layout nicer.
 		new OrderEdge(&m_graph, varVxp, m_activeSenVxp, WEIGHT_MEDIUM);
 	    } else {
-		if (!m_logicVxp) nodep->v3fatalSrc("Var ref not under a logic block\n");
-		// What new directions is this used
-		// We don't want to add extra edges if the logic block has many usages of same var
+		// We are not in a SenItem. Part of general logic.
+		UINFO(7, "     in general logic" << endl);
+		if (!m_logicVxp)
+		    nodep->v3fatalSrc("Var ref not under a logic block\n");
+		// Is this variable consumed (i.e RV) or generated
+		// (i.e. LV). We don't want to add extra edges if the logic
+		// block has many usages of same var
 		bool gen = false;
 		bool con = false;
 		if (nodep->lvalue()) {
+		    // This variable is being used here as a
+		    // generator. Consider only if it has not already been
+		    // used as a generator in this logic statement.
 		    gen = !(varscp->user4() & VU_GEN);
+		    if (gen) UINFO(8, "      var considered generated" << endl);
 		} else {
+		    // This variable is being used here as a
+		    // consumer. Consider only if it has not already been used
+		    // as a consumer in this logic statement.
 		    con = !(varscp->user4() & VU_CON);
+		    if (con) UINFO(8, "      var possibly consumed" << endl);
+		    // Deal with the case where it is both generated and
+		    // consumed in the same logic block.
+		    // TODO. For some reason this only matters for non-clocked
+		    //       (i.e. combinatorial) logic.
 		    if ((varscp->user4() & VU_GEN) && !m_inClocked) {
 			// Dangerous assumption:
-			// If a variable is used in the same activation which defines it first,
-			// consider it something like:
+			// If a variable is used in the same activation which
+			// defines it first, consider it something like:
 			//		foo = 1
 			//		foo = foo + 1
-			// and still optimize.  This is the rule verilog-mode assumes for /*AS*/
+			// and still optimize.  This is the rule verilog-mode
+			// assumes for /*AS*/
 			// Note this will break though:
 			//		if (sometimes) foo = 1
 			//		foo = foo + 1
+			// TODO: Is this really true. user4 is cleared on
+			//       assignments and always blocks, so it would be
+			//       reset on the second statement in each case.
+			con = false;
+			UINFO(9, "       var already generated in combo logic"
+			      << endl);
+		    }
+		    if (varscp->varp()->attrClockEn() && !m_inPre
+			&& !m_inPost && !m_inClocked) {
+			// clock_enable attribute: user's worring about it for
+			// us. The documentation says this means the user
+			// guarantees there are no races.
+			//
+			// TODO: Does this mean the user is guaranteeing there
+			//       this will not appear in a loop. If so this is
+			//       why we only worry about this in non-clocked
+			//       (i.e. combinatorial) logic.
+			UINFO(9, "       var marked as clock enable" << endl);
 			con = false;
 		    }
-		    if (varscp->varp()->attrClockEn() && !m_inPre && !m_inPost && !m_inClocked) {
-			// clock_enable attribute: user's worring about it for us
-			con = false;
-		    }
+		    if (con) UINFO(8, "      var considered consumed" << endl);
 		}
+		// Update the generated/consumed data in user4 for this logic
+		// element.
 		if (gen) varscp->user4(varscp->user4() | VU_GEN);
 		if (con) varscp->user4(varscp->user4() | VU_CON);
-		// Add edges
-		if (!m_inClocked
-		    || m_inPost
-		    ) {
-		    // Combo logic: not settle and (combo or inPost)
+		// Add vertex (or vertices) for the variable and edges
+		// connecting to/from logic.
+		if (!m_inClocked || m_inPost) {
+		    // Var is in combinatorial logic or an ASSIGNPOST for
+		    // sequential logic.
+		    UINFO(8, "      var in combo logic/ASSIGNPOST" << endl);
 		    if (gen) {
-			// Add edge logic_vertex->logic_generated_var
-			OrderVarVertex* varVxp = newVarUserVertex(varscp, WV_STD);
+			UINFO(9, "       var generated" << endl);
+			// Variable is being generated. This is a standard
+			// variable vertex.
+			OrderVarVertex* varVxp =
+			    newVarUserVertex(varscp, WV_STD);
+			// Add edge from the logic vertex (which generated
+			// this variable) to the variable
+			//
+			// The edge is cutable if there is a loop where the
+			// output feeds back to the input. For a variable
+			// generated by ASSIGNPOST, this its only generation,
+			// since all other generators will have been replaced
+			// by the delayed version of the variable.
 			if (m_inPost) {
 			    new OrderPostCutEdge(&m_graph, m_logicVxp, varVxp);
 			} else {
 			    new OrderComboCutEdge(&m_graph, m_logicVxp, varVxp);
 			}
-			// For m_inPost:
-			//    Add edge consumed_var_POST->logic_vertex
-			//    This prevents a consumer of the "early" value to be scheduled
-			//   after we've changed to the next-cycle value
-			// ALWAYS do it:
-			//    There maybe a wire a=b; between the two blocks
-			OrderVarVertex* postVxp = newVarUserVertex(varscp, WV_POST);
-			new OrderEdge(&m_graph, postVxp, m_logicVxp, WEIGHT_POST);
+			UINFO(9, "       cutable edge to STD var from logic "
+			      << m_logicVxp->nodep() << endl);
+			// If this var is generated by ASSIGNPOST, we don't
+			// want this done, before any consumers of the early
+			// (PRE) value.
+			//
+			// We achieve this by a new POST vertex for the var
+			// with a non-cutable edge *from* the POST variable to
+			// the ASSIGNPOST which generated it (making it look
+			// like the ASSIGNPOST also consumed it).
+			//
+			// We *always* do this: there maybe a wire a=b;
+			// between the two blocks
+			OrderVarVertex* postVxp =
+			    newVarUserVertex(varscp, WV_POST);
+			new OrderEdge(&m_graph, postVxp, m_logicVxp,
+				      WEIGHT_POST);
+			UINFO(9, "       edge from POST var to logic "
+			      << m_logicVxp->nodep() << endl);
 		    }
 		    if (con) {
-			// Add edge logic_consumed_var->logic_vertex
-			OrderVarVertex* varVxp = newVarUserVertex(varscp, WV_STD);
-			new OrderEdge(&m_graph, varVxp, m_logicVxp, WEIGHT_MEDIUM);
+			UINFO(9, "       var consumed" << endl);
+			// Variable is being consumed. This is a standard
+			// variable vertex.
+			OrderVarVertex* varVxp =
+			    newVarUserVertex(varscp, WV_STD);
+			// Add a non-cutable edge from the logic consuming
+			// this variable to the variable.
+			new OrderEdge(&m_graph, varVxp, m_logicVxp,
+				      WEIGHT_MEDIUM);
+			UINFO(9, "       edge to STD var from logic "
+			      << m_logicVxp->nodep() << endl);
 		    }
 		} else if (m_inPre) {
-		    // AstAssignPre logic
+		    UINFO(8, "      var in ASSIGNPRE" << endl);
+		    // ASSIGNPRE variable in sequential logic (well you don't
+		    // get them in combinatorial logic anyway).
 		    if (gen) {
-			// Add edge logic_vertex->generated_var_PREORDER
-			OrderVarVertex* ordVxp = newVarUserVertex(varscp, WV_PORD);
-			new OrderEdge(&m_graph, m_logicVxp, ordVxp, WEIGHT_NORMAL);
-			// Add edge logic_vertex->logic_generated_var (same as if comb)
-			OrderVarVertex* varVxp = newVarUserVertex(varscp, WV_STD);
-			new OrderEdge(&m_graph, m_logicVxp, varVxp, WEIGHT_NORMAL);
+			UINFO(9, "       var generated" << endl);
+			// We need to distinguish between generated and
+			// consumed variables in ASSIGNPRE. We use PORD here,
+			// when the variable is *generated*
+			OrderVarVertex* ordVxp =
+			    newVarUserVertex(varscp, WV_PORD);
+			// Add a non-cutable edge from the ASSIGNPRE logic
+			// generating the variable's value to the variable.
+			new OrderEdge(&m_graph, m_logicVxp, ordVxp,
+				      WEIGHT_NORMAL);
+			UINFO(9, "       edge to PORD var from logic "
+			      << m_logicVxp->nodep() << endl);
+			// Also add a standard variable vetex
+			OrderVarVertex* varVxp =
+			    newVarUserVertex(varscp, WV_STD);
+			// Add a non-cutable edge from the ASSIGNPRE logic
+			// generating the variable's value to the variable.
+			new OrderEdge(&m_graph, m_logicVxp, varVxp,
+				      WEIGHT_NORMAL);
+			UINFO(9, "       edge to STD var from logic "
+			      << m_logicVxp->nodep() << endl);
 		    }
 		    if (con) {
-			// Add edge logic_consumed_var_PREVAR->logic_vertex
-			// This one is cutable (vs the producer) as there's only one of these, but many producers
-			OrderVarVertex* preVxp = newVarUserVertex(varscp, WV_PRE);
+			UINFO(9, "       var consumed" << endl);
+			// The ASSIGNPRE variable is consumed. For this we use
+			// ASSIGNPRE.
+			OrderVarVertex* preVxp =
+			    newVarUserVertex(varscp, WV_PRE);
+			// This variable can only ever be consumed once, by
+			// the ASSIGNPRE for which it was created (all other
+			// consumer will be using the delayed version of the
+			// variable), so we make it cutable.
 			new OrderPreCutEdge(&m_graph, preVxp, m_logicVxp);
+			UINFO(9, "       edge from PRE var to logic "
+			      << m_logicVxp->nodep() << endl);
 		    }
 		} else {
-		    // Seq logic
+		    // Any other variables in sequential logic. These may be
+		    // past of the ordinary ASSIGNDLYs (which at this stage
+		    // generate delayed outputs) or part of blocking
+		    // ASSIGNs. In general we want these done as early as
+		    // possible. For blocking assigns, this means before any
+		    // delayed assigns. For delayed assigns, the dependencies
+		    // in the graph will mean they happen at their correct
+		    // time.
+		    UINFO(8, "      var in general sequential logic" << endl);
 		    if (gen) {
-			// Add edge logic_generated_var_PREORDER->logic_vertex
-			OrderVarVertex* ordVxp = newVarUserVertex(varscp, WV_PORD);
-			new OrderEdge(&m_graph, ordVxp, m_logicVxp, WEIGHT_NORMAL);
-			// Add edge logic_vertex->logic_generated_var (same as if comb)
-			OrderVarVertex* varVxp = newVarUserVertex(varscp, WV_STD);
-			new OrderEdge(&m_graph, m_logicVxp, varVxp, WEIGHT_NORMAL);
+			UINFO(9, "       var generated" << endl);
+			// Generated variables use a PORD note, but the
+			// direction is from the variable *to* the logic, as
+			// though the logic were consuming the variable. In
+			// other words, we want any variables like this to be
+			// read *before* the logic is evaluated.
+			//
+			// In particular, this means that blocking assigns
+			// will correctly happen before delayed assigns.
+			OrderVarVertex* ordVxp =
+			    newVarUserVertex(varscp, WV_PORD);
+			new OrderEdge(&m_graph, ordVxp, m_logicVxp,
+				      WEIGHT_NORMAL);
+			UINFO(9, "       edge from PORD var to logic "
+			      << m_logicVxp->nodep() << endl);
+			// We also need to treat this as an ordinary
+			// variable generated by the logic.
+			OrderVarVertex* varVxp =
+			    newVarUserVertex(varscp, WV_STD);
+			new OrderEdge(&m_graph, m_logicVxp, varVxp,
+				      WEIGHT_NORMAL);
+			UINFO(9, "       edge to STD var from logic "
+			      << m_logicVxp->nodep() << endl);
 		    }
 		    if (con) {
-			// Add edge logic_vertex->consumed_var_PREVAR
-			// Generation of 'pre' because we want to indicate it should be before AstAssignPre
-			OrderVarVertex* preVxp = newVarUserVertex(varscp, WV_PRE);
-			new OrderEdge(&m_graph, m_logicVxp, preVxp, WEIGHT_NORMAL);
-			// Add edge logic_vertex->consumed_var_POST
-			OrderVarVertex* postVxp = newVarUserVertex(varscp, WV_POST);
-			new OrderEdge(&m_graph, m_logicVxp, postVxp, WEIGHT_POST);
+			UINFO(9, "       var consumed" << endl);
+			// Consumed variables end up with both PRE and POST
+			// vertices, both with edges *from* the consuming
+			// logic, as though they were generated. However this
+			// will mean they are consumed as early as possible
+			// (which is also correct for blocking assigns.
+			OrderVarVertex* preVxp =
+			    newVarUserVertex(varscp, WV_PRE);
+			new OrderEdge(&m_graph, m_logicVxp, preVxp,
+				      WEIGHT_NORMAL);
+			UINFO(9, "       edge to PRE var from logic "
+			      << m_logicVxp->nodep() << endl);
+			OrderVarVertex* postVxp =
+			    newVarUserVertex(varscp, WV_POST);
+			new OrderEdge(&m_graph, m_logicVxp, postVxp,
+				      WEIGHT_POST);
+			UINFO(9, "       edge to POST var from logic "
+			      << m_logicVxp->nodep() << endl);
 		    }
 		}
 	    }

@@ -19,35 +19,68 @@
 //*************************************************************************
 // V3Delayed's Transformations:
 //
+// TODO. The comments previously here were not consistent with the code. This
+//       is my understanding of what atually happens.
+//
 // Each module:
 //	Replace ASSIGNDLY var, exp
-//	    With   ASSIGNDLY newvar, exp
-//	    At top of block:  VAR  newvar
-//	    At bottom of block: ASSIGNW var newvar
-//		Need _x_dly = x at top of active if "x" is not always set
-//			For now we'll say it's set if at top of block (not under IF, etc)
-//		Need x = _x_dly at bottom of active if "x" is never referenced on LHS
-//			in the active, and above rule applies too.  (If so, use x on LHS, not _x_dly.)
+//	    With   ASSIGNDLY __Vdly__var, exp
+//	Declare
+//	    VAR  __Vdly__var
+//	At top of block:
+//	    ASSIGNPRE __Vdly__var var
+//	At bottom of block:
+//	    ASSIGNPOST var __Vdly__var
 //
-//	If a signal is set in multiple always blocks, we need a dly read & set with
-//	multiple clock sensitivities.  We have 3 options:
-//	    1. When detected, make a new ACTIVE and move earlier created delayed assignment there
-//	    2. Form unique ACTIVE for every multiple clocked assignment
-//	    3. Predetect signals from multiple always blocks and do #2 on them
-//	    Since all 3 require a top activation cleanup, we do #2 which is easiest.
+// The ASSIGNPRE and ASSIGNPOST are put in their own activation block, with
+// the same sensitivity, but with the name "senitemdly" to make the AST easy
+// to read.
 //
-// ASSIGNDLY (BITSEL(ARRAYSEL (VARREF(v), bits), selbits), rhs)
-// ->	VAR __Vdlyvset_x
-// 	VAR __Vdlyvval_x
-// 	VAR __Vdlyvdim_x
-// 	VAR __Vdlyvlsb_x
-//	ASSIGNW (__Vdlyvset_x,0)
-//	...
-//	ASSIGNW (VARREF(__Vdlyvval_x), rhs)
-//	ASSIGNW (__Vdlyvdim_x, dimension_number)
-//	ASSIGNW (__Vdlyvset_x, 1)
-//	...
-//	ASSIGNW (BITSEL(ARRAYSEL(VARREF(x), __Vdlyvdim_x), __Vdlyvlsb_x), __Vdlyvval_x)
+// The old comments said:
+//	Need _x_dly = x at top of active if "x" is not always set
+//	    For now we'll say it's set if at top of block (not under IF, etc)
+//	Need x = _x_dly at bottom of active if "x" is never referenced on LHS
+//	in the active, and above rule applies too.  (If so, use x on LHS, not
+//	_x_dly.)
+//
+// As far as I can see the use of ASSIGNPRE and ASSIGNPOST achieves this, but
+// is done for all variables - no need to make assumptions.
+//
+// The old comments said that if a signal is set in multiple always blocks, we
+// need a dly read & set with multiple clock sensitivities.  We have 3
+// options:
+//     1. When detected, make a new ACTIVE and move earlier created delayed
+//        assignment there ;
+//     2. Form unique ACTIVE for every multiple clocked assignment; or
+//     3. Predetect signals from multiple always blocks and do #2 on them.
+// Since all 3 require a top activation cleanup, we do #2 which is easiest.
+//
+// I think the use of ASSIGNPRE and ASSIGNPOST is effectively the
+// implementation of this, and is done for ever signal, not just if there are
+// multiple clock sensitivities.
+//
+// Arrays and bit selects are more complex.
+//
+// TODO. I don't really understand this, not least because I can see the
+//       declaration of __Vdlyvval_x, but not where it is ever actually
+//       used. I can't see that ASSIGNW is ever used now.
+//
+// In summary:
+//
+//     	ASSIGNDLY (BITSEL(ARRAYSEL (VARREF(v), bits), selbits), rhs)
+//     	 -> VAR __Vdlyvset_x
+//     	    VAR __Vdlyvval_x
+//     	    VAR __Vdlyvdim_x
+//     	    VAR __Vdlyvlsb_x
+//    	    ASSIGNPRE (__Vdlyvset_x,0)
+//    	    ...
+//    	    ASSIGNW (VARREF(__Vdlyvval_x), rhs)
+//    	    ASSIGN (__Vdlyvdim_x, dimension_number)
+//    	    ASSIGN (__Vdlyvset_x, 1)
+//          ASSIGN (__Vdlyvlsb_x, select_lsb)
+//    	    ...
+//    	    ASSIGNW (BITSEL(ARRAYSEL(VARREF(x), __Vdlyvdim_x), __Vdlyvlsb_x),
+//                   __Vdlyvval_x)
 //
 //*************************************************************************
 
