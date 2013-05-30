@@ -364,6 +364,7 @@ private:
     void processSensitive();
     void processDomains();
     void processDomainsIterate(OrderEitherVertex* vertexp);
+    bool domainMatch(AstSenTree *domainp, string sigName, AstEdgeType et);
     void processEdgeReport();
 
     void processMove();
@@ -1084,14 +1085,42 @@ void OrderVisitor::processDomains() {
 }
 
 void OrderVisitor::processDomainsIterate(OrderEitherVertex* vertexp) {
-    // The graph routines have already sorted the vertexes and edges into best->worst order
+    // The graph routines have already sorted the vertexes and edges into
+    // best->worst order.
     // Assign clock domains to each signal.
     //     Sequential logic is forced into the same sequential domain.
-    //     Combo logic may be pushed into a seq domain if all its inputs are the same domain,
+    //     Combo logic may be pushed into a seq domain if all its inputs are
+    //     the same domain,
     //     else, if all inputs are from flops, it's end-of-sequential code
     //     else, it's full combo code
+
+    // This just seems to be a convenience. Any vertex not in a loop is
+    // explicitly numbered as being in the "not in a loop" loop.
     if (!vertexp->inLoop()) vertexp->inLoop(LOOPID_NOTLOOPED);
-    if (vertexp->domainp()) return;	// Already processed, or sequential logic
+
+    // Domains are set when ASTSENTREE are processed, but otherwise unset
+    // until processed by this function.
+    if (vertexp->domainp()) {
+	// At this point, we only need to make any domain substitution. Note
+	// that if we can't find the substitute domain, it just means we have
+	// elimiated it and need not worry.
+	//
+	// TODO: This is not efficient - we need a marker to say that domain
+	//       subsitution has been done.
+	if (domainMatch(vertexp->domainp(), "v.gated_clk",
+			AstEdgeType::ET_POSEDGE)) {
+	    AstSenTree *domainp = m_finder.getSenItem("clk",
+						      AstEdgeType::ET_POSEDGE);
+	    if (domainp) {
+		UINFO(6,"     substituting clk for v.gated_clk");
+		vertexp->domainp(domainp);
+	    }
+	    else {
+		UINFO(6,"     no need to substite clk for v.gated_clk");
+	    }
+	}
+	return;
+    }
     UINFO(5,"    pdi: "<<vertexp<<endl);
     OrderVarVertex* vvertexp = dynamic_cast<OrderVarVertex*>(vertexp);
     AstSenTree* domainp = NULL;
@@ -1124,19 +1153,22 @@ void OrderVisitor::processDomainsIterate(OrderEitherVertex* vertexp) {
 		    // Ignore that we have a constant (initial) input
 		}
 		else if (domainp != fromVertexp->domainp()) {
-		    // Make a domain that merges the two domains
+		    // Create a new, merged domain
+		    AstSenTree *fromDomainp = fromVertexp->domainp();
 		    bool ddebug = debug()>=9;
 		    if (ddebug) {
 			cout<<endl;
-			UINFO(0,"      conflicting domain "<<fromVertexp<<endl);
+			UINFO(0,"      conflicting domain "
+			      <<fromVertexp<<endl);
 			UINFO(0,"         dorig="<<domainp<<endl);
-			domainp->dumpTree(cout);
-			UINFO(0,"         d2   ="<<fromVertexp->domainp()<<endl);
-			fromVertexp->domainp()->dumpTree(cout);
+			    domainp->dumpTree(cout);
+			    UINFO(0,"         d2   ="
+				  <<fromDomainp<<endl);
+			    fromDomainp->dumpTree(cout);
 		    }
 		    AstSenTree* newtreep = domainp->cloneTree(false);
-		    AstNodeSenItem* newtree2p = fromVertexp->domainp()->sensesp()->cloneTree(true);
-		    if (!newtree2p) fromVertexp->domainp()->v3fatalSrc("No senitem found under clocked domain");
+		    AstNodeSenItem* newtree2p = fromDomainp->sensesp()->cloneTree(true);
+		    if (!newtree2p) fromDomainp->v3fatalSrc("No senitem found under clocked domain");
 		    newtreep->addSensesp(newtree2p);
 		    newtree2p=NULL; // Below edit may replace it
 		    V3Const::constifyExpensiveEdit(newtreep);	// Remove duplicates
@@ -1170,6 +1202,31 @@ void OrderVisitor::processDomainsIterate(OrderEitherVertex* vertexp) {
 	      <<" "<<vertexp<<endl);
     }
 }
+
+//! Do we have a named EdgeType?
+
+//! The given SENTREE should have a single SENITEM of the given edge type with
+//! the same (pretty) name.
+bool OrderVisitor::domainMatch(AstSenTree *domainp, string sigName,
+			       AstEdgeType et) {
+    UASSERT(domainp, "matching empty SENTREE");
+    AstSenItem *senItemp = dynamic_cast<AstSenItem *>(domainp->sensesp());
+    UASSERT(senItemp, "matching empty SENITEM");
+
+    UINFO(9, "       domainMatch for " << sigName << " and edge type " << et
+	  << endl);
+    if (senItemp->varrefp()) {
+	UINFO(9, "       - found " << senItemp->varrefp()->prettyName()
+	      << endl);
+    }
+    else {
+	UINFO(9, "       - found no VARREF" << endl);
+    }
+
+    return (!senItemp->nextp()) && (senItemp->edgeType() == et)
+	&& (senItemp->varrefp()->prettyName() == sigName);
+}
+
 
 //######################################################################
 // Move graph construction
