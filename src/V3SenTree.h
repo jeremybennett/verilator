@@ -122,29 +122,6 @@ public:
 	}
 	return treep;
     }
-    //! Return a global SENTREE with a single SENITEM that matches the given
-    //! name and edge type.
-    AstSenTree* getSenItem(string sigName, AstEdgeType et) {
-	vector<AstSenTree*>::iterator it;
-	//sensesp->dumpTree(cout,"  Lookingfor: ");
-	for (it = m_treesp.begin(); it!=m_treesp.end(); ++it) {
-	    AstSenTree* treep = *it;
-	    if (treep) {  // Not deleted
-		AstSenItem *itemp =
-		    dynamic_cast<AstSenItem *>(treep->sensesp());
-		UASSERT(itemp, "found empty SENITEM");
-		if ((!itemp->nextp()) && (itemp->edgeType() == et)
-		    && (itemp->varrefp()->prettyName() == sigName)) {
-		    UINFO(8,"    Found SITEM "<<treep<<endl);
-		    return treep;
-		}
-	    }
-	}
-
-	v3fatal("Can't find tree for SENITEM " << sigName << " for edge type "
-		<< et);
-	return NULL;
-    }
 public:
     // CONSTUCTORS
     SenTreeFinder() {

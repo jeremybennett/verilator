@@ -284,6 +284,8 @@ private:
     bool		m_inPost;	// Underneath AstAssignPost
     OrderLogicVertex*	m_activeSenVxp;	// Sensitivity vertex
     deque<OrderUser*>	m_orderUserps;	// All created OrderUser's for later deletion.
+    AstNodeVarRef*	m_pvarrefp;	// Parent varref for merging
+
     // STATE... for inside process
     OrderLoopId			m_loopIdMax;	// Maximum BeginLoop id number assigned
     vector<OrderLoopEndVertex*> m_pmlLoopEndps;	// processInsLoop: End vertex for each color
@@ -364,8 +366,9 @@ private:
     void processSensitive();
     void processDomains();
     void processDomainsIterate(OrderEitherVertex* vertexp);
-    bool domainMatch(AstSenTree *domainp, string sigName, AstEdgeType et);
-    void processEdgeReport();
+    void mergeDomains();
+    void mergeDomainsIterate(OrderEitherVertex* vertexp, AstSenTree *psentreep);
+    void processEdgeReport(string suffix);
 
     void processMove();
     void processMoveClear();
@@ -601,6 +604,8 @@ private:
 	}
     }
     virtual void visit(AstNodeVarRef* nodep, AstNUser*) {
+	// Prototyping - for future fixing.
+	if (nodep->prettyName() == "clk") m_pvarrefp = nodep->cloneTree(false);
 	// Only bother about variable references that are under some scope.
 	UINFO(5, "   visiting AstNodeVarRef " << nodep << endl);
 	if (m_scopep) {
@@ -920,6 +925,7 @@ public:
 	m_pomNewFuncp = NULL;
 	m_loopIdMax = LOOPID_FIRST;
 	m_pomNewStmts = 0;
+	m_pvarrefp = NULL;
 	if (debug()) m_graph.debug(5); // 3 is default if global debug; we want acyc debugging
     }
     virtual ~OrderVisitor() {
@@ -1101,24 +1107,6 @@ void OrderVisitor::processDomainsIterate(OrderEitherVertex* vertexp) {
     // Domains are set when ASTSENTREE are processed, but otherwise unset
     // until processed by this function.
     if (vertexp->domainp()) {
-	// At this point, we only need to make any domain substitution. Note
-	// that if we can't find the substitute domain, it just means we have
-	// elimiated it and need not worry.
-	//
-	// TODO: This is not efficient - we need a marker to say that domain
-	//       subsitution has been done.
-	if (domainMatch(vertexp->domainp(), "v.gated_clk",
-			AstEdgeType::ET_POSEDGE)) {
-	    AstSenTree *domainp = m_finder.getSenItem("clk",
-						      AstEdgeType::ET_POSEDGE);
-	    if (domainp) {
-		UINFO(6,"     substituting clk for v.gated_clk");
-		vertexp->domainp(domainp);
-	    }
-	    else {
-		UINFO(6,"     no need to substite clk for v.gated_clk");
-	    }
-	}
 	return;
     }
     UINFO(5,"    pdi: "<<vertexp<<endl);
@@ -1185,10 +1173,10 @@ void OrderVisitor::processDomainsIterate(OrderEitherVertex* vertexp) {
 		}
 	    }
 	} // next input edgep
-	// Default the domain
-	// This is a node which has only constant inputs, or is otherwise indeterminate.
-	// It should have already been copied into the settle domain.  Presumably it has
-	// inputs which we never trigger, or nothing it's sensitive to, so we can rip it out.
+	// Default the domain This is a node which has only constant inputs,
+	// or is otherwise indeterminate.  It should have already been copied
+	// into the settle domain.  Presumably it has inputs which we never
+	// trigger, or nothing it's sensitive to, so we can rip it out.
 	if (!domainp && vertexp->scopep()) {
 	    domainp = m_deleteDomainp;
 	}
@@ -1203,37 +1191,95 @@ void OrderVisitor::processDomainsIterate(OrderEitherVertex* vertexp) {
     }
 }
 
-//! Do we have a named EdgeType?
+//! Merge related clocked domains
 
-//! The given SENTREE should have a single SENITEM of the given edge type with
-//! the same (pretty) name.
-bool OrderVisitor::domainMatch(AstSenTree *domainp, string sigName,
-			       AstEdgeType et) {
-    UASSERT(domainp, "matching empty SENTREE");
-    AstSenItem *senItemp = dynamic_cast<AstSenItem *>(domainp->sensesp());
-    UASSERT(senItemp, "matching empty SENITEM");
+//! Where two sensitivities are related (for example a clock and a gated
+//! clock) we can merge any MULTI domains sensitive to them both. So for example
+//! something sensitive to @(posedge clk or posedge gated_clk) can be replaced
+//! by sensitivity to @(posedge clk).
 
-    UINFO(9, "       domainMatch for " << sigName << " and edge type " << et
-	  << endl);
-    if (senItemp->varrefp()) {
-	UINFO(9, "       - found " << senItemp->varrefp()->prettyName()
-	      << endl);
+//! For now this is horribly hard-coded, but eventually we should have a
+//! simple mapping and we need only walk over the tree.
+void OrderVisitor::mergeDomains() {
+    // Find the parent tree to use for replacement.
+    AstSenTree *tmpsentreep =
+	new AstSenTree(m_pvarrefp->fileline(),
+		       new AstSenItem(m_pvarrefp->fileline(),
+				      AstEdgeType::ET_POSEDGE, m_pvarrefp));
+    AstSenTree *psentreep = m_finder.getSenTree(tmpsentreep->fileline(),
+						tmpsentreep);
+
+    V3GraphVertex *itp;
+    for (itp = m_graph.verticesBeginp(); itp; itp=itp->verticesNextp()) {
+	OrderEitherVertex* vertexp = dynamic_cast<OrderEitherVertex*>(itp);
+	mergeDomainsIterate(vertexp, psentreep);
     }
-    else {
-	UINFO(9, "       - found no VARREF" << endl);
-    }
+}
 
-    return (!senItemp->nextp()) && (senItemp->edgeType() == et)
-	&& (senItemp->varrefp()->prettyName() == sigName);
+//! Merge domain for one vertex
+
+//! Again all hard coded.
+void OrderVisitor::mergeDomainsIterate(OrderEitherVertex* vertexp,
+				       AstSenTree *psentreep) {
+    if (AstSenTree *domainp = vertexp->domainp()) {
+	AstSenItem *sip = dynamic_cast<AstSenItem *>(domainp->sensesp());
+	if (sip) {
+	    // First sensitivity
+	    AstNodeVarRef *vrefp = sip->varrefp();
+	    if (vrefp
+		&& (sip->edgeType() == AstEdgeType::ET_POSEDGE)
+		&& (vrefp->prettyName() == "clk")) {
+		// First sensitivity is @posedge clk
+		sip = dynamic_cast<AstSenItem *>(sip->nextp());
+		if (sip) {
+		    // Second sensitivity
+		    vrefp = sip->varrefp();
+		    if (vrefp
+			&& (sip->edgeType() == AstEdgeType::ET_POSEDGE)
+			&& (vrefp->prettyName() == "v.gated_clk")) {
+			// Second sensitivity is @posedge v.gated_clk
+			if (!sip->nextp()) {
+			    // No more sensitivities - we match
+			    vertexp->domainp(psentreep);
+			    UINFO(8, "        merged match" << endl);
+			}
+			return;
+		    }
+		}
+	    }
+	    else if (vrefp
+		     && (sip->edgeType() == AstEdgeType::ET_POSEDGE)
+		     && (vrefp->prettyName() == "v.gated_clk")) {
+		// First sensitivity is @posedge v.gated_clk
+		sip = dynamic_cast<AstSenItem *>(sip->nextp());
+		if (sip) {
+		    // Second sensitivity
+		    vrefp = sip->varrefp();
+		    if (vrefp
+			&& (sip->edgeType() == AstEdgeType::ET_POSEDGE)
+			&& (vrefp->prettyName() == "clk")) {
+			// Second sensitivity is @posedge clk
+			if (!sip->nextp()) {
+			    // No more sensitivities - we match
+			    vertexp->domainp(psentreep);
+			    UINFO(8, "        merged reverse match" << endl);
+			}
+			return;
+		    }
+		}
+	    }
+	}
+    }
 }
 
 
 //######################################################################
 // Move graph construction
 
-void OrderVisitor::processEdgeReport() {
+void OrderVisitor::processEdgeReport(string suffix = "") {
     // Make report of all signal names and what clock edges they have
-    string filename = v3Global.debugFilename("order_edges.txt");
+    string corename = "order_edges_" + suffix + ".txt";
+    string filename = v3Global.debugFilename(corename);
     const auto_ptr<ofstream> logp (V3File::new_ofstream(filename));
     if (logp->fail()) v3fatalSrc("Can't write "<<filename);
     //Testing emitter: V3EmitV::verilogForTree(v3Global.rootp(), *logp);
@@ -1249,7 +1295,7 @@ void OrderVisitor::processEdgeReport() {
 	    else if (dynamic_cast<OrderVarSettleVertex*>(itp)) name += " {STL}";
 	    ostringstream os;
 	    os.setf(ios::left);
-	    os<<"  "<<(void*)(vvertexp->varScp())<<" "<<setw(50)<<name<<" ";
+	    os<<"  "<<(void*)(vvertexp->varScp())<<" "<<setw(30)<<name<<" ";
 	    AstSenTree* sentreep = vvertexp->domainp();
 	    if (sentreep) V3EmitV::verilogForTree(sentreep, os);
 	    report.push_back(os.str());
@@ -1568,7 +1614,14 @@ void OrderVisitor::process() {
     processDomains();
     m_graph.dumpDotFilePrefixed("orderg_domain");
 
-    if (debug() && v3Global.opt.dumpTree()) processEdgeReport();
+    if (debug() && v3Global.opt.dumpTree()) processEdgeReport("base");
+
+    // Merge domains
+    UINFO(2,"  Merge domains...\n");
+    mergeDomains();
+    m_graph.dumpDotFilePrefixed("orderg_merged_domains");
+
+    if (debug() && v3Global.opt.dumpTree()) processEdgeReport("merged");
 
     UINFO(2,"  Construct Move Graph...\n");
     processMoveBuildGraph();
