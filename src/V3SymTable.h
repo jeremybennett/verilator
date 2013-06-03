@@ -166,7 +166,7 @@ private:
 	}
     }
 public:
-    bool import(VSymGraph* graphp, const VSymEnt* srcp, const string& id_or_star) {
+    bool importFromPackage(VSymGraph* graphp, const VSymEnt* srcp, const string& id_or_star) {
 	// Import tokens from source symbol table into this symbol table
 	// Returns true if successful
 	bool any = false;
@@ -182,6 +182,18 @@ public:
 	    }
 	}
 	return any;
+    }
+    void importFromIface(VSymGraph* graphp, const VSymEnt* srcp) {
+	// Import interface tokens from source symbol table into this symbol table, recursively
+	UINFO(9, "     importIf  se"<<(void*)this<<" from se"<<(void*)srcp<<endl);
+	for (IdNameMap::const_iterator it=srcp->m_idNameMap.begin(); it!=srcp->m_idNameMap.end(); ++it) {
+	    const string& name = it->first;
+	    VSymEnt* srcp = it->second;
+	    VSymEnt* symp = new VSymEnt(graphp, srcp);
+	    reinsert(name, symp);
+	    // And recurse to create children
+	    srcp->importFromIface(graphp, symp);
+	}
     }
     void cellErrorScopes(AstNode* lookp, string prettyName="") {
 	if (prettyName=="") prettyName = lookp->prettyName();
