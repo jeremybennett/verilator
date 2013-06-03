@@ -229,8 +229,7 @@ void process () {
     if (!v3Global.opt.xmlOnly()) {
 	// Add top level wrapper with instance pointing to old top
 	// Move packages to under new top
-	// Must do this after we know the width of any parameters
-	// We also do it after coverage/assertion insertion so we don't 'cover' the top level.
+	// Must do this after we know parameters and dtypes (as don't clone dtype decls)
 	V3LinkLevel::wrapTop(v3Global.rootp());
     }
 
@@ -680,7 +679,7 @@ int main(int argc, char** argv, char** env) {
     }
 
     // Final steps
-    V3Global::dumpGlobalTree("final.tree",999);
+    V3Global::dumpGlobalTree("final.tree",990);
     V3Error::abortIfWarnings();
 
     if (!v3Global.opt.lintOnly() && !v3Global.opt.cdc()
