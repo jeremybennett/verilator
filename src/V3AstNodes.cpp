@@ -35,9 +35,21 @@
 // Special methods
 
 // We need these here, because the classes they point to aren't defined when we declare the class
-bool AstNodeVarRef::broken() const {
-    return ((m_varScopep && !m_varScopep->brokeExists())
-	    || (m_varp && !m_varp->brokeExists()));
+const char* AstIfaceRefDType::broken() const {
+    BROKEN_RTN(m_ifacep && !m_ifacep->brokeExists());
+    BROKEN_RTN(m_cellp && !m_cellp->brokeExists());
+    BROKEN_RTN(m_modportp && !m_modportp->brokeExists());
+    return NULL;
+}
+
+AstIface* AstIfaceRefDType::ifaceViaCellp() const {
+    return ((m_cellp && m_cellp->modp()) ? m_cellp->modp()->castIface() : m_ifacep);
+}
+
+const char* AstNodeVarRef::broken() const {
+    BROKEN_RTN(m_varScopep && !m_varScopep->brokeExists());
+    BROKEN_RTN(m_varp && !m_varp->brokeExists());
+    return NULL;
 }
 
 void AstNodeVarRef::cloneRelink() {
@@ -56,18 +68,18 @@ void AstNodeClassDType::repairMemberCache() {
     }
 }
 
-bool AstNodeClassDType::broken() const {
+const char* AstNodeClassDType::broken() const {
     set<AstMemberDType*> exists;
     for (AstMemberDType* itemp = membersp(); itemp; itemp=itemp->nextp()->castMemberDType()) {
 	exists.insert(itemp);
     }
     for (MemberNameMap::const_iterator it=m_members.begin(); it!=m_members.end(); ++it) {
-	if (exists.find(it->second) == exists.end()) {
+	if (VL_UNLIKELY(exists.find(it->second) == exists.end())) {
 	    this->v3error("Internal: Structure member broken: "<<it->first);
-	    return true;
+	    return "member broken";
 	}
     }
-    return false;
+    return NULL;
 }
 
 int AstBasicDType::widthAlignBytes() const {
@@ -421,10 +433,12 @@ AstNode* AstArraySel::baseFromp(AstNode* nodep) {	///< What is the base variable
     return nodep;
 }
 
-bool AstScope::broken() const {
-    return ((m_aboveScopep && !m_aboveScopep->brokeExists())
-	    || (m_aboveCellp && !m_aboveCellp->brokeExists())
-	    || !m_modp || !m_modp->brokeExists());
+const char* AstScope::broken() const {
+    BROKEN_RTN(m_aboveScopep && !m_aboveScopep->brokeExists());
+    BROKEN_RTN(m_aboveCellp && !m_aboveCellp->brokeExists());
+    BROKEN_RTN(!m_modp);
+    BROKEN_RTN(m_modp && !m_modp->brokeExists());
+    return NULL;
 }
 
 void AstScope::cloneRelink() {
@@ -720,11 +734,30 @@ void AstEnumItemRef::dump(ostream& str) {
     if (itemp()) { itemp()->dump(str); }
     else { str<<"UNLINKED"; }
 }
+void AstIfaceRefDType::dump(ostream& str) {
+    this->AstNode::dump(str);
+    if (cellName()!="") { str<<" cell="<<cellName(); }
+    if (ifaceName()!="") { str<<" if="<<ifaceName(); }
+    if (modportName()!="") { str<<" mp="<<modportName(); }
+    if (cellp()) { str<<" -> "; cellp()->dump(str); }
+    else if (ifacep()) { str<<" -> "; ifacep()->dump(str); }
+    else { str<<" -> UNLINKED"; }
+}
+void AstIfaceRefDType::dumpSmall(ostream& str) {
+    this->AstNodeDType::dumpSmall(str);
+    str<<"iface";
+}
 void AstJumpGo::dump(ostream& str) {
     this->AstNode::dump(str);
     str<<" -> ";
     if (labelp()) { labelp()->dump(str); }
     else { str<<"%Error:UNLINKED"; }
+}
+void AstModportVarRef::dump(ostream& str) {
+    this->AstNode::dump(str);
+    str<<" "<<varType();
+    if (varp()) { str<<" -> "; varp()->dump(str); }
+    else { str<<" -> UNLINKED"; }
 }
 void AstPin::dump(ostream& str) {
     this->AstNode::dump(str);
@@ -841,7 +874,7 @@ void AstVarXRef::dump(ostream& str) {
     if (lvalue()) str<<" [LV] => ";
     else          str<<" [RV] <- ";
     str<<dotted()<<". - ";
-    if (inlinedDots()!="") str<<" flat.="<<inlinedDots()<<" - ";
+    if (inlinedDots()!="") str<<" inline.="<<inlinedDots()<<" - ";
     if (varScopep()) { varScopep()->dump(str); }
     else if (varp()) { varp()->dump(str); }
     else { str<<"UNLINKED"; }
