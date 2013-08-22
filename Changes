@@ -3,13 +3,24 @@ Revision history for Verilator
 The contributors that suggested a given feature are shown in [].  [by ...]
 indicates the contributor was also the author of the fix; Thanks!
 
-* Verilator 3.851 devel
+* Verilator 3.852 devel
+
+***   Support named function and task arguments. [Chris Randall]
+
+
+* Verilator 3.851 2013-08-15
 
 ***   Fix ordering of clock enables with delayed assigns, bug613. [Jeremy Bennett]
 
 ***   Fix vpi_iterate on memory words, bug655. [Rich Porter]
 
+****  Fix final duplicate declarations when non-inlined, bug661. [Charlie Brej]
+
 ****  Fix interface ports with comma lists, msg1058. [Ed Lander]
+
+****  Fix parameter real conversion from integer.
+
+****  Fix clang warnings, bug668.  [Yutetsu Takatsukasa]
 
 
 * Verilator 3.850 2013-06-02
