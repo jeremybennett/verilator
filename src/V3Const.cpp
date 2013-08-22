@@ -1236,6 +1236,8 @@ private:
 		&& ((!m_params // Can reduce constant wires into equations
 		     && m_doNConst
 		     && v3Global.opt.oConst()
+		     && !(nodep->varp()->isFuncLocal() // Default value, not a "known" constant for this usage
+			  && nodep->varp()->isInput())
 		     && !nodep->varp()->isSigPublic())
 		    || nodep->varp()->isParam())) {
 		AstConst* constp = nodep->varp()->valuep()->castConst();
@@ -1649,7 +1651,10 @@ private:
 	    replaceWithSimulation(nodep);
 	}
     }
-
+    virtual void visit(AstArg* nodep, AstNUser*) {
+	// replaceWithSimulation on the Arg's parent FuncRef replaces these
+	nodep->iterateChildren(*this);
+    }
     virtual void visit(AstWhile* nodep, AstNUser*) {
 	nodep->iterateChildren(*this);
 	if (m_doNConst) {
