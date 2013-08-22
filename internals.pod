@@ -380,12 +380,13 @@ Coverage toggles, corresponding to C<AstCoverToggle> nodes, generate a logic nod
 
 With one exception, variable nodes, base class C<OrderVarVertex>, are created
 in response to variable references, C<AstNodeVarRef> (with derived classes
-C<AstVarRef> and C<AstVarXRef>), in the AST.  See L</Variables, Variable
-Scopes and Variable References> for more details about veriable references.
-How variable nodes are created depends on whether a value is being
-I<generated> (i.e used as a L-value) or I<consumed> (i.e. used as a R-value).
-Any one reference may lead to the creation of either one or two variable
-nodes.
+C<AstVarRef> and C<AstVarXRef>), in the AST.  However the graph node is
+associated, not with the variable reference, but with its scope.  See
+L</Variables, Variable Scopes and Variable References> for more details about
+veriable references.  How variable nodes are created depends on whether a
+value is being I<generated> (i.e used as a L-value) or I<consumed> (i.e. used
+as a R-value).  Any one reference may lead to the creation of either one or
+two variable nodes.
 
 The exception is for the inputs at the top level of the program, extracted
 from the C<AstVarScope> of the top level module.  These top level inputs are
@@ -435,9 +436,12 @@ properties of these edges.
 
 =item Cutability
 
-Some edges can be "cut" to help within the ordering algorithms.  This cutting
-is used to deal with looping dependencies in the variable references, and will
-lead to loops in the generated code.  Edges that may be cut are marked as
+Some edges can be "cut" to help within the ordering algorithms.  An edge
+indicates a dependency ordering for statements which reference
+variables. However it may be that the dependency ordering cannot be resolved:
+A depends on B, which in turn depends on A.  The only way to resolve this will
+be by removing or "cutting" an edge in the graph, but this then ,eams we will
+need a loop to allow the value to settle.  Edges that may be cut are marked as
 I<cutable>.
 
 =item Weight
@@ -463,7 +467,144 @@ edge is cutable.
 
 =head3 Building the dependency graph
 
-The edges
+The logic and vertex nodes and the edges which connect them in the dependency
+graph are constructed when the various statements and variable references are
+encountered as the AST is walked by the C<visit> functions of class
+C<OrderVisitor>.  The edges are added during this process to build the
+dependency graph. The various AST nodes are dealt with as follows
+
+=over 4
+
+=item C<AstAlways>
+
+=item C<AstAlwaysPost>
+
+=item C<AstAlwaysPublic>
+
+=item C<AstAssignAlias>
+
+=item C<AstAssignW>
+
+=item C<AstAssignPre>
+
+=item C<AstAssignPost>
+
+=item C<AstCoverToggle>
+
+All these AST nodes are statements, and the graph logic node is constructed in
+C<iterateNewStmt>. If the node is inside a clocked activation, then an edge is
+added from the logic node for the sensitivity tree to the newly created logic
+node for the statements. This indicates that all the sensitivity variable
+references are consumed within the statement.  This is the only time there us
+a dependency created between logic nodes.
+
+B<Note.> Is this the best way of describing things? There is dependency, but
+it is of a different type to a variable being consumed as a R-value.  See
+commnet on C<AStSenTree> below.
+
+=item C<AstSenTree>
+
+This is the only place where a logic node in the dependency graph created
+outside C<iterateNewStatement>. It is not needed for correctness of the
+algorithm, but improves connectedness, which ultimately helps the graph
+algorithms.
+
+=item C<AstTopScope>
+
+This creates a special node, representing the "top" of the dependency
+graph. It is special in being neither a logic nor variable node and a pointer
+to it is maintained in the C<OrderVisitor> member C<m_inputsVxp>. It will
+eventually have edges to all variables whose scope is the top level module and
+which are inputs.
+
+=item C<AstVarScope>
+
+Action is only taken for the C<AstVarScope> AST nodes in the top level module
+which have been marked as inputs.  These are the top level inputs to the model,
+and an edge is created from the "top" of the dependency tree in C<m_inputsVxp>
+to var the node, indicating that the top level node generates the value in
+these variable scopes.
+
+=item C<AstNodeVarRef>
+
+Apart for C<AstVarScope>, it is variable references (either C<AstVarRef> or
+C<AstVarXRef>) which generate variable nodes in the graph. The node is
+associated with the C<AstVarScope> of the variable, not the C<AstVarRef>, so
+there will only be one graph node, even if the variable is referenced the same
+way multiple times in the same scope.
+
+If the reference is in a sensitivity tree, then an C<OrderVarStdVertex> is
+created, with an edge to the associated sensitivity logic node. This indicates
+that the variable is consumed by the sensitivity.
+
+Otherwise how the reference is treated depends on whether it is being consumed
+or generated (it can't be both). Action is only taken the first time that a
+variable is generated or consumed in a particular scope.
+
+B<Note.> There is an optimization for combinatorial contexts, which considers
+that a variable cannot be consumed if it has aready been generated. This seems
+a reasonable assumption, given that all assignments must be blocking, for
+example:
+
+  foo = 1;
+  foo = foo + 1;
+
+There is no point in considering the second statement a consumer of C<foo>,
+since it is not the value coming into the combinatorial block.  However this
+can fail sometimes because the graph construction cannot see if a previous
+generation was in fact conditional:
+
+  if (cond) foo = 1;
+  foo = foo + 1;
+
+In fact foo may be consumed if the value of C<cond> was false.  This appears
+to be an issue of optimization, rather than correctness however.
+
+For variable references that are generated inside combinatorial logic, an
+C<OrderVarStdVertex> is created and a I<cutable> edge from the logic node
+containing the variable reference to this new variable node is added.  This
+represents the fact that the logic generates this variable's value.
+
+To allow this edge to be cut we need a way of ensuring the variable is
+eventually generated, so we create a second node of class
+C<OrderVarPostVertex> with a standard (non-cutable) edge from it to the logic
+node. So the logic node, knows tha after all the standard variables are done,
+it must do a post evaluation of this variable.
+
+For variable references that are consumed inside combinatorial logic, an
+C<OrderVarStdVertex> is created and a standard (non-cutable) edge to the logic
+node containing the variable reference from this new variable node is added.
+This represents the fact that the logic consumes this variable's value.  Even
+though it is combinatorial code, there is no need to make the edge cutable. To
+resolve looping dependencies, it is sufficient just to ensure that one of
+either generated of consumed variables has cutable dependencies, and Verilator
+chooses to make generated variables cutable.
+
+Post-assignment variables in clocked code have exactly the same dependency
+requirements as combinatorial variables, and are treated identically.  If we
+recall from L</Sorting out Delayed Assignment (F<V3Delayed.cpp>)>,
+post-assignment is where the delayed value is assigned back
+
+ a <= a';
+
+This is the only time C<a'> is consumed and the only time C<a> is generated.
+
+Pre-assignment variables in clocked code have their own particular
+requirements.  Again recall, tis is where the delayed value is first
+generated:
+
+ a' <= a
+
+This is the first time C<a'> is generated and the first time C<a> is consumed,
+and must be treated specially because it is in the pre-assignment context.
+
+(more to be written)
+
+Ordinary variables in clocked code
+
+(more to be written)
+
+=back
 
 =head1 CODING CONVENTIONS
 
