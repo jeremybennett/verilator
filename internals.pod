@@ -14,7 +14,7 @@ the first for reference for developers and debugging problems.
 
 See also the Verilator internals presentation at http://www.veripool.org.
 
-=head1 CODE FLOWS
+=head1 TOP LEVEL CODE FLOWS AND CLASSES
 
 =head2 Verilator Flow
 
@@ -24,23 +24,36 @@ process() function:
 First, the files specified on the command line are read.  Reading involves
 preprocessing, then lexical analysis with Flex and parsing with Bison.
 This produces an abstract syntax tree (AST) representation of the design,
-which is what is visible in the .tree files described below.
+which is what is visible in the F<.tree> files described below.
 
 Verilator then makes a series of passes over the AST, progressively refining
-and optimizing it.
+and optimizing it.  Some of these passes are described futher in the chapter
+on L</PASS DETAILS>.
+
+=over 4
+
+=item *
 
 Cells in the AST first linked, which will read and parse additional files as
 above.
 
+=item *
+
 Functions, variable and other references are linked to their definitions.
 
+=item *
+
 Parameters are resolved and the design is elaborated.
+
+=item *
 
 Verilator then performs many additional edits and optimizations on the
 hierarchical design.  This includes coverage, assertions, X elimination,
 inlining, constant propagation, and dead code elimination.
 
-References in the design are then psudo-flattened.  Each module's variables
+=item *
+
+References in the design are then pseudo-flattened.  Each module's variables
 and functions get "Scope" references.  A scope reference is an occurrence of
 that un-flattened variable in the flattened hierarchy.  A module that occurs
 only once in the hierarchy will have a single scope and single VarScope for
@@ -49,21 +62,31 @@ occurrence, and two VarScopes for each variable.  This allows optimizations
 to proceed across the flattened design, while still preserving the
 hierarchy.
 
-Additional edits and optimizations proceed on the psudo-flat design.  These
+=item *
+
+Additional edits and optimizations proceed on the pseudo-flat design.  These
 include module references, function inlining, loop unrolling, variable
 lifetime analysis, lookup table creation, always splitting, and logic gate
 simplifications (pushing inverters, etc).
 
+=item *
+
 Verilator orders the code.  Best case, this results in a single "eval"
 function which has all always statements flowing from top to bottom with no
 loops.
+
+=item *
 
 Verilator mostly removes the flattening, so that code may be shared between
 multiple invocations of the same module.  It localizes variables, combines
 identical functions, expands macros to C primitives, adds branch prediction
 hints, and performs additional constant propagation.
 
+=item *
+
 Verilator finally writes the C++ modules.
+
+=back
 
 =head2 Key Classes Used in the Verilator Flow
 
@@ -146,12 +169,13 @@ C<V3GraphEdge> which will reimplement these methods.
 
 This is the base class for graph algorithms. It implements a C<bool> method,
 C<followEdge> which algorithms can use to decide whether an edge is
-followed. This method returns true if the graph edge has weight greater than
-one and a user function, C<edgeFuncp> (supplied in the constructor) returns
-C<true>.
+followed. This method returns true if the graph edge has non-zero weight and a
+user function, C<edgeFuncp> (supplied in the constructor) returns C<true>.
 
 A number of predefined derived algorithm classes and access methods are
-provided and documented in C<V3GraphAlg.cpp>.
+provided and documented in C<V3GraphAlg.cpp>. These derived classes may
+overload base class methods of C<V3GraphAlg> as required. For example
+C<followEdge> can be modified to allow following of edges with weight of zero.
 
 =back
 
@@ -180,6 +204,266 @@ If tracing is enabled, a callback examines all variables in the design for
 changes, and writes the trace for each change.  To accelerate this process
 the evaluation process records a bitmask of variables that might have
 changed; if clear, checking those signals for changes may be skipped.
+
+=head1 PASS DETAILS
+
+This chapter goes into more details on some of the passes.
+
+=head2 Setting Variable Scope (F<V3Scope.cpp>)
+
+This is the first part of flattening the hiearchy, creating a C<AstScope> for
+each module, and populating it with C<AstVarScope> entries for each variable
+reference within the module.  In addition an instance of C<AstTopScope> is
+created for the top level module.  In a later pass, all the C<AstScope>
+instances will be gathered under the C<AstTopScope>.
+
+=head2 Flattening the Hierarchy (F<V3LinkDot.cpp>)
+
+This occurs immediately after variable scopes have been set (see L</Setting
+Variable Scope (F<V3Scope.cpp>)>).  It has a number of other functions, but a
+key one is that it connects all variable references to their variable
+scope. In so doing it can also resolve any C<AstVarXRef> references to
+variables in other modules, replacing them by C<AstVarRef> with a link to the
+appropriate scope.
+
+=head2 Sorting out Delayed Assignment (F<V3Delayed.cpp>)
+
+Delayed assignments are also sometime called I<non-blocking assignments>.
+
+This pass occurs late in the processing of pseudo-flattened AST, shortly
+before the dependency ordering pass. Consider the following Verilog:
+
+  always @(posedge clk) begin
+     a <= b;
+     b <= a;
+  end
+
+The effect is to swap C<a> and C<b>, and it is clear that to convert to a C++
+model, a temporary variable will be needed.  Generically we need to replace
+
+     a <= b;
+
+by
+
+     a' <= b
+     a  <= a'
+
+ensuring that the final assignment to C<a> occurs only after all uses of C<a>
+elsewhere (possibly in another C<always> block with the same sensitivities).
+But suppose the original assignment is conditional
+
+     if (cond) begin
+       a <= b
+     end
+
+then it may be that C<a'> never gets set. So the final assignment back will
+not be correct. So the full transformation we need is:
+
+     a' <= a   (before any uses of a)
+     ...
+     a' <= b   (may be many of these)
+     ...
+     a <= a'   (after any uses of a)
+
+Rather than make an explicit ordering in the code sequence, two new types of
+delayed assignment AST node are used.  C<AstAssignPre> is used for the initial
+assignments, and when the ordering pass occurs, will be scheduled before any
+ordinary delayed assignments.  Similarly C<AstAssignPost> is used for the
+final assignments, and will be scheduled after any ordinary delayed
+assignments.
+
+Rather than C<'>, Verilator uses the prefix C<__Vdly__> for the temporary
+variables.  The full transformation for C<<v <= exp>> is as follows.
+
+=over 4
+
+=item *
+
+Declare C<__Vdly__v> (where C<v> is the full hiearchical dotted name), using
+C<AstVar> and the same C<AstVarScope> as for C<v>.
+
+=item *
+
+Create a preassignment for C<<__Vdly__v <= exp>>, using C<AstAssignPre>.
+
+=item *
+
+Replace all L-value references to C<v> in delayed assignments by C<__Vdly__v>.
+
+=item *
+
+Create a postassignment for C<<v <= __Vdly__v>>, using C<AstAssignPre>.
+
+=back
+
+Assignment may be not just to a simple variable, but to a bit- or part-select.  For example:
+
+  reg  v[2:0]
+  ...
+  always @(posedge clk) begin
+     v[2:1] = ...
+
+The algorithm is a considerably more complex, since we have to allow for only
+parts of a variable changing, but the principle is the same.  The
+transformation needs to create an array of combinatorial post-assignments, and
+for this purpose creates a custom combinatorial C<always> block.  This is the
+sole purpose of the C<AstAlwaysPost> ASTnode.
+
+=head2 Ordering of Variables (F<V3Order.cpp>)
+
+The ordering pass runs on the pseudo-flattened tree. q It makes use of the
+C<OrderVistor> class to create a dependency graph showing how the variables
+(wires, vectors etc) are generated (i.e. are outputs) and consumed (i.e. are
+inputs) by the various logic blocks in the program.
+
+The graph contains logic and variable nodes, with logic. In general variable
+nodes have edges pointing I<to> logic nodes where the variable is consumed
+(i.e. is an input), and I<from> logic nodes where the variable is generated
+(i.e. is an output).  Thus the graph corresponds almost entirely of
+alternating logic and variable nodes.  The one exception is with I<ACTIVE>
+logic nodes (see below), which point to their associated I<ALWAYS> logic
+nodes.
+
+=head3 Logic nodes
+
+The logic nodes, instances of class C<OrderLogicVertex>, correspond to one of
+the following in the original program.
+
+=over 4
+
+=item Sensitivities in clocked logic
+
+These nodes are labelled with the keyword I<ACTIVE>.  All the variables to which
+the clocked logic is senstive are consumed by the ACTIVE node, and so there
+are edges from these variables I<to> the ACTIVE node.  They are derived from
+C<AstSenTree> nodes for clocked logic.
+
+=item Assignment statements
+
+These nodes are labelled with the keyword I<ASSIGNPOST>, I<ASSIGNPRE>,
+I<ASSIGNW> or I<ASSIGNALIAS>, corresponding to C<AstAssignPost>,
+C<AstAssignPre>, C<AstAssignW> or C<AstAssignAlias>.
+
+Note that delayed (i.e. non-blocking) assignments do not merit their own
+statement nodes. These have been transformed as described in L</Sorting out
+Delayed Assignment (F<V3Delayed.cpp>)> and may appear anywhere in the output
+code. There are no constraints on their ordering.  All that matters is the
+ordering of their associated C<AssignPre> and C<AssignPost> nodes.
+
+=item Always blocks
+
+These nodes are labelled with the keyword I<ALWAYS>, I<ALWAYSPOST> or
+I<ALWAYSPUBLIC> and are derived from C<AstAlways>, C<AstAlwaysPost> or
+C<AstAlwaysPublic> nodes.
+
+For sequential logic, they have edges to and from nodes representing variables
+within the C<always> block which are consumed or generated.  For each consumed
+variable, a pair of nodes is created, of type I<PRE> and I<POST> (more on this
+in the description of variable nodes below), with edges connecting the logic
+node I<to> these nodes (since they are actually generated values).
+
+For each generated variable, a pair of nodes is created, of type I<PORD> and
+I<STD>, with edges connecting the logic node I<from> the I<PORD> node and
+I<to> the I<STD> node.
+
+In addition, for clocked logic, they have an edge from the I<ACTIVE> node
+defining the sensitivities of the block.  The sensitivity variables are all
+consumed (i.e. inputs).
+
+=item Other logic nodes
+
+Coverage toggles, corresponding to C<AstCoverToggle> nodes, generate a logic node, with a labele I<COVERTOGGLE>.
+
+=back
+
+=head3 Variable nodes
+
+With one exception, variable nodes, base class C<OrderVarVertex>, are created
+in response to variable references, C<AstNodeVarRef> (with derived classes
+C<AstVarRef> and C<AstVarXRef>), in the AST.  See L</Variables, Variable
+Scopes and Variable References> for more details about veriable references.
+How variable nodes are created depends on whether a value is being
+I<generated> (i.e used as a L-value) or I<consumed> (i.e. used as a R-value).
+Any one reference may lead to the creation of either one or two variable
+nodes.
+
+The exception is for the inputs at the top level of the program, extracted
+from the C<AstVarScope> of the top level module.  These top level inputs are
+all pointed to by the special top level vertex, of class C<OrderInputsVertex>,
+which is held in the member variable C<m_inputsVxp> of the C<OrderVisitor>
+instance.
+
+There are four derived classes of C<OrderVarVertex> used for the different
+roles variables may play in the dependency graph in standard Verilog (there is
+a fifth used for settle loops in the experimental NEW_ORDERING algorithm).
+
+=over 4
+
+=item C<OrderVarStdVertex>
+
+Used for top level inputs, references in sensitivity trees, references in
+combinatorial logic, references in post-assignments, generated references in
+pre-assigments and generated references in sequential (clocked) logic.
+
+=item C<OrderVarPreVertex>
+
+Used for consumed references in pre-assigments and for consumed references in
+sequential (clocked) logic.
+
+=item C<OrderVarPordVertex>
+
+Used for generated references in pre-assignments and generated references in
+sequential (clocked) logic.
+
+=item C<OrderVarPostVertex>
+
+Used for generated references in combinatorial logic, generated references in
+post-assignments and consumed references in sequential (clocked) logic.
+
+=back
+
+The ordering algorithm must ensure that the use of all references keeps to the
+following sequence: C<OrderVarPreVertex>, C<OrderVarPordVertex>,
+C<OrderVarStdVertex>, C<OrderVarPostVertex>.
+
+=head3 Edges
+
+Edges between nodes are instances of class C<OrderEdge>.  There are two key
+properties of these edges.
+
+=over 4
+
+=item Cutability
+
+Some edges can be "cut" to help within the ordering algorithms.  This cutting
+is used to deal with looping dependencies in the variable references, and will
+lead to loops in the generated code.  Edges that may be cut are marked as
+I<cutable>.
+
+=item Weight
+
+All edges have a weight.  Edges to be cut have their weight set to zero, and
+will be generally ignored by subsequent algorithms, or when printing the
+graph.
+
+The value of non-zero weights have no impact on the algorithms, but they do
+help the graph layout when printed with GraphViz I<dot>.  Edges with heavier
+weights tend to "pull" nodes together in the image.
+
+=back
+
+class C<OrderEdge> has a number of derived classes, C<OrderComboCutEdge>,
+C<OrderPostCutEdge> and C<OrderPreCutEdge>.  These are provided purely for the
+convience provided by their constructors, which mark the edge cutable (by
+default it is not) and provide a weight appropriate to the type of edge.
+
+The algorithms make no use of the derived classes. They are purely driven by
+which nodes are are connected by an instance of C<OrderEdge> and whether that
+edge is cutable.
+
+=head3 Building the dependency graph
+
+The edges
 
 =head1 CODING CONVENTIONS
 
@@ -712,7 +996,7 @@ File a bug (if there isn't already) so others know what you're working on.
 
 =item 2.
 
-Make a testcase in the test_regress/t/t_EXAMPLE format, see L<TESTING>.
+Make a testcase in the test_regress/t/t_EXAMPLE format, see L</TESTING>.
 
 =item 3.
 
@@ -743,6 +1027,65 @@ in C<src/verilator.cpp>.
 
 To get your pass to build you'll need to add its binary filename to the list
 in C<src/Makefile_obj.in> and reconfigure.
+
+=head1 MISCELLANEOUS
+
+This chapter contains commentaries on various aspects of the design of
+Verilator, which don't cleanly fit in other parts of this manual.
+
+=head2 Variables, Variable Scopes and Variable References
+
+Verilator refers to wires, registers, vectors and the like as I<variables>.  There are a number of ways we refer to variables.  For example there is a variable declaration itself:
+
+ reg v[1:0];
+
+Verilator uses C<AstVar> to represent variable declarations in the AST.  What about when the variable is used:
+
+ always @(posedge clk) begin
+    v <= {v[0], clk};
+ end
+
+Each reference to C<v> is represented in Verilator using C<AstVarRef>, which
+includes a link back to the declaration's C<AstVar>.  There is a variant
+version of this class, C<AstVarXRef>, to deal with references to variables in
+other modules. This variant is only used in the early passes, and eliminated
+when the design is flattened.
+
+How do we deal with variables having the same name in different modules, or
+multiple instantiations of the same module.  For example:
+
+ module top_mod;
+ ...
+ sub_mod i_sub_mod_1;
+ sub_mod i_sub_mod_2;
+ ...
+ endmodule
+ 
+ module sub_mod;
+ ...
+ reg v[1:0]
+ ...
+
+In this case there will be two instances of C<v>. Once we flatten the design,
+we'll need to be explicit about this.  The solution used by Verilator is to
+introduce a node, C<AstVarScope>, showing the scope to which a variable
+applies.  These are created at the start of flattening (see L</Setting
+Variable Scope (F<V3Scope.cpp>)>.  Each C<VarRef> now gains an additional
+pointer to its associated scope.
+
+All the C<AstVarScope> nodes for each module are collected under one
+C<AstScope> node in the AST. There is one C<AstScope> for each module
+instance.
+
+The top level module also has a C<AstTopScope> node, under which its
+C<AstScope> node sits.  Eventually flattening will pull all the C<AstScope>
+nodes from individual module instances under C<AstTopScope>, since the link
+from C<AstVarRef> nodes will make it clear the scope of an individual variable
+reference.
+
+=head2 What is C<AstCell> Used For?
+
+C<AstCell> is just used for the instances of modules (whose declarations use C<AstModule>).
 
 =head1 DISTRIBUTION
 
