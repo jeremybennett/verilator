@@ -427,6 +427,17 @@ The ordering algorithm must ensure that the use of all references keeps to the
 following sequence: C<OrderVarPreVertex>, C<OrderVarPordVertex>,
 C<OrderVarStdVertex>, C<OrderVarPostVertex>.
 
+B<Note.> Only one node of each type is created for each variable.  An attempt
+to create another copy, will just return a reference to the existing
+node. This is managed by C<OrderUser::newVarUserVertex>, with the information
+held in the C<AstVarScope::user1p> field during the C<OrderVisitor> walk over
+the tree.
+
+The algorithms do not concern themselves with which derived class is
+used. They exist purely to allow one variable to have a number of different
+node representations in the graph. The algorithms are driven by the properties
+of the edges connecting those nodes.
+
 =head3 Edges
 
 Edges between nodes are instances of class C<OrderEdge>.  There are two key
@@ -450,9 +461,36 @@ All edges have a weight.  Edges to be cut have their weight set to zero, and
 will be generally ignored by subsequent algorithms, or when printing the
 graph.
 
-The value of non-zero weights have no impact on the algorithms, but they do
-help the graph layout when printed with GraphViz I<dot>.  Edges with heavier
-weights tend to "pull" nodes together in the image.
+The value of the weight is used to control some of the algorithms when
+ordering, and also The value of non-zero weights have no impact on the
+algorithms, but they to help the graph layout when printed with GraphViz
+I<dot>. The key values are:
+
+=over 8
+
+=item C<WEIGHT_INPUT = 1>
+
+=item C<WEIGHT_COMBO = 1>
+
+=item C<WEIGHT_LOOPBE = 1>
+
+Edge from inputs (only affects graph layout), cutable edge in combinatorial
+logic or edge to loop begin/end.
+
+=item C<WEIGHT_POST = 2>
+
+Edge from post-delayed consumed variable.
+
+=item C<WEIGHT_POST = 3>
+
+Edge from pre-delayed consumed variable.
+
+=item C<WEIGHT_NORMAL = 8>
+=item C<WEIGHT_NORMAL = 32>
+
+Any other edges. The weight just helps layout, but otherwise makes no difference.
+
+=back
 
 =back
 
@@ -462,8 +500,8 @@ convience provided by their constructors, which mark the edge cutable (by
 default it is not) and provide a weight appropriate to the type of edge.
 
 The algorithms make no use of the derived classes. They are purely driven by
-which nodes are are connected by an instance of C<OrderEdge> and whether that
-edge is cutable.
+which nodes are are connected by an instance of C<OrderEdge>, the weight of
+the edge, and whether that edge is cutable.
 
 =head3 Building the dependency graph
 
@@ -520,10 +558,10 @@ which are inputs.
 =item C<AstVarScope>
 
 Action is only taken for the C<AstVarScope> AST nodes in the top level module
-which have been marked as inputs.  These are the top level inputs to the model,
-and an edge is created from the "top" of the dependency tree in C<m_inputsVxp>
-to var the node, indicating that the top level node generates the value in
-these variable scopes.
+which have been marked as inputs.  These are the top level inputs to the
+model, and an edge of weight C<WEIGHT_INPUT = 1> is created from the "top" of
+the dependency tree in C<m_inputsVxp> to var the node, indicating that the top
+level node generates the value in these variable scopes.
 
 =item C<AstNodeVarRef>
 
@@ -534,8 +572,9 @@ there will only be one graph node, even if the variable is referenced the same
 way multiple times in the same scope.
 
 If the reference is in a sensitivity tree, then an C<OrderVarStdVertex> is
-created, with an edge to the associated sensitivity logic node. This indicates
-that the variable is consumed by the sensitivity.
+created, with an edge of weight C<WEIGHT_MEDIUM = 8> to the associated
+sensitivity logic node. This indicates that the variable is consumed by the
+sensitivity.
 
 Otherwise how the reference is treated depends on whether it is being consumed
 or generated (it can't be both). Action is only taken the first time that a
@@ -561,24 +600,27 @@ In fact foo may be consumed if the value of C<cond> was false.  This appears
 to be an issue of optimization, rather than correctness however.
 
 For variable references that are generated inside combinatorial logic, an
-C<OrderVarStdVertex> is created and a I<cutable> edge from the logic node
-containing the variable reference to this new variable node is added.  This
-represents the fact that the logic generates this variable's value.
+C<OrderVarStdVertex> is created and a I<cutable> edge of weight C<WEIGHT_COMBO
+= 1> from the logic node containing the variable reference to this new
+variable node is added.  This represents the fact that the logic generates
+this variable's value.
 
 To allow this edge to be cut we need a way of ensuring the variable is
 eventually generated, so we create a second node of class
-C<OrderVarPostVertex> with a standard (non-cutable) edge from it to the logic
-node. So the logic node, knows tha after all the standard variables are done,
-it must do a post evaluation of this variable.
+C<OrderVarPostVertex> with a standard (non-cutable) edge of weight
+C<WEIGHT_POST = 2> from it to the logic node. So the logic node, knows tha
+after all the standard variables are done, it must do a post evaluation of
+this variable.
 
 For variable references that are consumed inside combinatorial logic, an
-C<OrderVarStdVertex> is created and a standard (non-cutable) edge to the logic
-node containing the variable reference from this new variable node is added.
-This represents the fact that the logic consumes this variable's value.  Even
-though it is combinatorial code, there is no need to make the edge cutable. To
-resolve looping dependencies, it is sufficient just to ensure that one of
-either generated of consumed variables has cutable dependencies, and Verilator
-chooses to make generated variables cutable.
+C<OrderVarStdVertex> is created and a standard (non-cutable) edge of weight
+C<WEIGHT_POST = 2> to the logic node containing the variable reference from
+this new variable node is added.  This represents the fact that the logic
+consumes this variable's value.  Even though it is combinatorial code, there
+is no need to make the edge cutable. To resolve looping dependencies, it is
+sufficient just to ensure that one of either generated of consumed variables
+has cutable dependencies, and Verilator chooses to make generated variables
+cutable.
 
 Post-assignment variables in clocked code have exactly the same dependency
 requirements as combinatorial variables, and are treated identically.  If we
@@ -590,7 +632,7 @@ post-assignment is where the delayed value is assigned back
 This is the only time C<a'> is consumed and the only time C<a> is generated.
 
 Pre-assignment variables in clocked code have their own particular
-requirements.  Again recall, tis is where the delayed value is first
+requirements.  Again recall, this is where the delayed value is first
 generated:
 
  a' <= a
@@ -598,11 +640,33 @@ generated:
 This is the first time C<a'> is generated and the first time C<a> is consumed,
 and must be treated specially because it is in the pre-assignment context.
 
-(more to be written)
+For the generated variable (C<a'>), two nodes are created, one of class
+C<OrderVarStdVertex> and one of class C<OrderVarPordVertex>. A standard edge of
+weight C<WEIGHT_NORMAL = 32> from the containing logic node to each is
+created, indicating that the variable is generated by the logic.
 
-Ordinary variables in clocked code
+for the consumed variable (C<a>), a single node of class C<OrderVarPreVertex>
+is created with a cutable edge of weight C<WEIGHT_PRE (3)> from the node to
+the containing logic, indicating that the variable is consumed by the logic.
 
-(more to be written)
+Ordinary variables in clocked code require two nodes each. For generated
+variables, these are of class C<OrderVarStdVertex> and one of class
+C<OrderVarPordVertex>. The first is connected by an edge of weight
+C<WEIGHT_NORMAL (32)> I<to> the containing logic node, indicating it is
+consumed, the second is connected by an edge of weight C<WEIGHT_NORMAL (32)>
+I<from> the containing logic node, indicating it is generated.
+
+B<Note.> The first of these may seem rather strange - why does a generated
+variable require a node indicating it is also consumed?
+
+For consumed variables, the two nodes are one of class C<OrderVarPreVertex>
+and one of class C<OrderVarPostVertex>. The first is connected by an edge of
+weight C<WEIGHT_NORMAL (32)> I<from> the containing logic node, indicating it
+is generated, the second is connected by an edge of weight C<WEIGHT_POST (3)>
+I<to> the containing logic node, indicating it is consumed.
+
+B<Note.> Again, the first of these may seem rather strange - why does a consumed
+variable require a node indicating it is also generated?
 
 =back
 
