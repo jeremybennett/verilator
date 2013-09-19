@@ -32,8 +32,11 @@
 #include "V3File.h"
 #include "V3Graph.h"
 
-int V3Graph::s_debug = 0;
-int V3Graph::debug() { return max(V3Error::debugDefault(), s_debug); }
+int V3Graph::s_debug = -1;
+int V3Graph::debug() {
+    if (VL_UNLIKELY(s_debug < 0)) s_debug = v3Global.opt.debugSrcLevel(__FILE__);
+    return max(V3Error::debugDefault(), s_debug);
+}
 
 //######################################################################
 //######################################################################

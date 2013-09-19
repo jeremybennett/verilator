@@ -11,6 +11,7 @@ top_filename("t/t_unoptflat_simple.v");
 
 # Compile only
 compile (
+    verilator_flags2 => ["--report-unoptflat"],
     fails => 1
     );
 

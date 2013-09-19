@@ -385,6 +385,12 @@ class GraphAlgSubtrees : GraphAlg {
 private:
     V3Graph* m_loopGraphp;
 
+    //! Overload followEdge, so we follow cut edges (i.e. with weight == 0) as
+    //! well.
+    inline bool followEdge(V3GraphEdge* edgep) {
+	return ((m_edgeFuncp)(edgep));
+    }
+
     //! Iterate through all connected nodes of a graph with a loop or loops.
     V3GraphVertex* vertexIterateAll(V3GraphVertex* vertexp) {
 	if (V3GraphVertex* newVertexp = (V3GraphVertex*)vertexp->userp()) {
@@ -401,6 +407,8 @@ private:
 			V3GraphVertex* newTop = vertexIterateAll(edgep->top());
 			newEdgep = edgep->clone(m_loopGraphp, newVertexp,
 						newTop);
+			// Make sure cut edges show.
+			if (!newEdgep->weight()) newEdgep->weight(1);
 			edgep->userp(newEdgep);
 		    }
 		}

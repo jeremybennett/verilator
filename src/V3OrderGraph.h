@@ -182,6 +182,7 @@ public:
     virtual bool domainMatters() { return false; }
 };
 
+#ifdef NEW_ORDERING
 class OrderSettleVertex : public OrderEitherVertex {
     OrderSettleVertex(V3Graph* graphp, const OrderSettleVertex& old)
 	: OrderEitherVertex(graphp, old) {}
@@ -197,6 +198,7 @@ public:
     virtual string dotName() const { return ""; }
     virtual bool domainMatters() { return true; }
 };
+#endif
 
 class OrderLogicVertex : public OrderEitherVertex {
     AstNode*		m_nodep;
@@ -302,6 +304,7 @@ public:
     virtual string dotColor() const { return "NavyBlue"; }
     virtual bool domainMatters() { return false; }
 };
+#ifdef NEW_ORDERING
 class OrderVarSettleVertex : public OrderVarVertex {
     OrderVarSettleVertex(V3Graph* graphp, const OrderVarSettleVertex& old)
 	: OrderVarVertex(graphp, old) {}
@@ -316,6 +319,7 @@ public:
     virtual string dotColor() const { return "PowderBlue"; }
     virtual bool domainMatters() { return false; }
 };
+#endif	// NEW_ORDERING
 
 //######################################################################
 //--- Looping constructs
@@ -458,6 +462,7 @@ public:
     }
 };
 
+#ifdef NEW_ORDERING
 class OrderChangeDetEdge : public OrderEdge {
     // Edge created from variable to OrderLoopEndVertex
     // Indicates a change detect will be required for this loop construct
@@ -466,7 +471,7 @@ class OrderChangeDetEdge : public OrderEdge {
 	: OrderEdge(graphp, fromp, top, old) {}
 public:
     OrderChangeDetEdge(V3Graph* graphp, V3GraphVertex* fromp, V3GraphVertex* top)
-	: OrderEdge(graphp, fromp, top, WEIGHT_MEDIUM, false) {}
+	: OrderEdge(graphp, fromp, top, WEIGHT_MEDIUM, NOT_CUTABLE) {}
     virtual OrderVEdgeType type() const { return OrderVEdgeType::EDGE_CHANGEDET; }
     virtual ~OrderChangeDetEdge() {}
     virtual OrderChangeDetEdge* clone(V3Graph* graphp, V3GraphVertex* fromp, V3GraphVertex* top) const {
@@ -474,6 +479,7 @@ public:
     }
     virtual string dotColor() const { return "blue"; }
 };
+#endif	// NEW_ORDERING
 
 class OrderComboCutEdge : public OrderEdge {
     // Edge created from output of combo logic

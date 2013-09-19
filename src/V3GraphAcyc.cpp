@@ -107,7 +107,11 @@ private:
     V3EdgeFuncP		m_origEdgeFuncp;	// Function that says we follow this edge (in original graph)
     uint32_t		m_placeStep;		// Number that user() must be equal to to indicate processing
 
-    static int debug() { return V3Graph::debug(); }
+    static int debug() {
+	static int level = -1;
+	if (VL_UNLIKELY(level < 0)) level = v3Global.opt.debugSrcLevel(__FILE__);
+	return max(level, V3Graph::debug());
+    }
 
     // METHODS
     void buildGraph (V3Graph* origGraphp);
