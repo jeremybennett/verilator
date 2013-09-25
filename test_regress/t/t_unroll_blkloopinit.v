@@ -20,21 +20,22 @@ module t (/*AUTOARG*/
        tmp[2] = 4'b0010;
        tmp[3] = 4'b0011;
    end
-   
 
    // Test loop
    always @ (posedge clk) begin
        int i;
-       // the following for-loop can't be UNROLLED
-       for(i = 0;(i < 4) && (i > 1); i++)
-       begin
-           tmp[i] <= tmp[i-i];
-       end
+      // the following for-loop can't be UNROLLED
+      for (i = 0; (i < 4) && (i > 1); i++) begin
+         tmp[i] <= tmp[i-i];
+      end
 
-	 if (tmp[3] != 4'b0011) $stop;
+      if (tmp[3] != 4'b0011) begin
+	 $stop;
+      end
+      else begin
 	 $write("*-* All Finished *-*\n");
 	 $finish;
+      end
    end
 
 endmodule
-
