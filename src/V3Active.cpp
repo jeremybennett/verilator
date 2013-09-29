@@ -180,7 +180,8 @@ private:
 	    }
 	    AstNode* newp = new AstAssign (nodep->fileline(),
 					   nodep->lhsp()->unlinkFrBack(),
-					   nodep->rhsp()->unlinkFrBack());
+					   nodep->rhsp()->unlinkFrBack(),
+					   true);
 	    nodep->replaceWith(newp);
 	    nodep->deleteTree(); nodep = NULL;
 	}

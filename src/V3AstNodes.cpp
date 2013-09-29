@@ -698,6 +698,11 @@ void AstAlways::dump(ostream& str) {
     if (keyword() != VAlwaysKwd::ALWAYS) str<<" ["<<keyword().ascii()<<"]";
 }
 
+void AstAssign::dump(ostream& str) {
+    this->AstNode::dump(str);
+    if (delayed()) str<<" [originally delayed]";
+}
+
 void AstArraySel::dump(ostream& str) {
     this->AstNode::dump(str);
     str<<" [start:"<<start()<<"] [length:"<<length()<<"]";

@@ -292,6 +292,8 @@ private:
     bool		m_inClocked;	// Underneath clocked block
     bool		m_inPre;	// Underneath AstAssignPre
     bool		m_inPost;	// Underneath AstAssignPost
+    bool		m_inInitial;	// Underneath AstInitial
+    bool		m_wasDelayed;	// Underneath AstAssign originally delayed
     OrderLogicVertex*	m_activeSenVxp;	// Sensitivity vertex
     deque<OrderUser*>	m_orderUserps;	// All created OrderUser's for later deletion.
     // STATE... for inside process
@@ -338,6 +340,9 @@ private:
 	    }
 	    nodep->user1p(m_modp);
 	    nodep->iterateChildren(*this);
+	    // We really don't want to leave logic vertices from initial
+	    // blocks lying around, unless they really are needed.
+	    if (m_inInitial && m_logicVxp->inEmpty() && m_logicVxp->outEmpty()) m_logicVxp->unlinkDelete(&m_graph);
 	    m_logicVxp = NULL;
 	}
     }
@@ -602,8 +607,9 @@ private:
 	m_scopep = NULL;
     }
     virtual void visit(AstActive* nodep, AstNUser*) {
-	// Create required activation blocks and add to module
-	if (nodep->hasInitial()) return;  // Ignore initials
+	// Create required activation blocks and add to module. We do initial
+	// blocks (which used not to be the case), since they need checking
+	// for what were originally delayed assignments
 	UINFO(4,"  ACTIVE  "<<nodep<<endl);
 	m_activep = nodep;
 	m_activeSenVxp = NULL;
@@ -662,7 +668,20 @@ private:
 		if (gen) varscp->user4(varscp->user4() | VU_GEN);
 		if (con) varscp->user4(varscp->user4() | VU_CON);
 		// Add edges
-		if (!m_inClocked
+		if (m_inInitial) {
+		    // Generally we want to ignore initial blocks. But we need
+		    // to do something if we have delayed assignments, to
+		    // ensure --x-initial-edge works OK with such assignments.
+		    if (gen && m_wasDelayed) {
+			// Add edge logic_vertex->logic_generated_var
+			OrderVarVertex* varVxp = newVarUserVertex(varscp, WV_STD);
+			new OrderPostCutEdge(&m_graph, m_logicVxp, varVxp);
+			UINFO(5, "     Found initial delayed assignment "
+			      << varVxp << endl);
+			varVxp->isDelayed(true);
+		    }
+		}
+		else if (!m_inClocked
 		    || m_inPost
 		    ) {
 		    // Combo logic
@@ -776,6 +795,16 @@ private:
 	    m_inSenTree = false;
 	}
     }
+    virtual void visit(AstInitial* nodep, AstNUser*) {
+	m_inInitial = true;
+	iterateNewStmt(nodep);
+	m_inInitial = false;
+    }
+    virtual void visit(AstAssign* nodep, AstNUser*) {
+	m_wasDelayed = nodep->delayed();
+	nodep->iterateChildren(*this);
+	m_wasDelayed = false;
+    }
     virtual void visit(AstAlways* nodep, AstNUser*) {
 	iterateNewStmt(nodep);
     }
@@ -828,6 +857,8 @@ public:
 	m_inSenTree = false;
 	m_inClocked = false;
 	m_inPre = m_inPost = false;
+	m_inInitial = false;
+	m_wasDelayed = false;
 	m_comboDomainp = NULL;
 	m_deleteDomainp = NULL;
 	m_settleDomainp = NULL;

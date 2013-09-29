@@ -1783,12 +1783,18 @@ struct AstAlwaysPost : public AstNode {
 };
 
 struct AstAssign : public AstNodeAssign {
-    AstAssign(FileLine* fileline, AstNode* lhsp, AstNode* rhsp)
-	: AstNodeAssign(fileline, lhsp, rhsp) {
+private:
+    bool  m_delayed;	// Was this originally a delayed assignment?
+public:
+    AstAssign(FileLine* fileline, AstNode* lhsp, AstNode* rhsp, bool delayed = false)
+	: AstNodeAssign(fileline, lhsp, rhsp), m_delayed(delayed) {
 	dtypeFrom(lhsp);
     }
     ASTNODE_NODE_FUNCS(Assign, ASSIGN)
+    virtual void dump(ostream& str);
     virtual AstNode* cloneType(AstNode* lhsp, AstNode* rhsp) { return new AstAssign(this->fileline(), lhsp, rhsp); }
+    bool delayed() const { return m_delayed; }
+    void delayed(bool d) { m_delayed = d; }
 };
 
 struct AstAssignAlias : public AstNodeAssign {

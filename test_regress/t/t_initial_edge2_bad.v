@@ -6,8 +6,8 @@
 //	$finish;
 // on success, or $stop.
 //
-// Demonstration of problem with --initial-edge being overridden by initial
-// blocks with delayed assignment.
+// Demonstration of problem with --initial-edge NOT being overridden by
+// initial blocks with blocking assignment.
 //
 // This file ONLY is placed into the Public Domain, for any use,
 // without warranty, 2013 by ____YOUR_NAME_HERE____.
@@ -20,11 +20,9 @@ module t (/*AUTOARG*/
 
    reg startpulse;    // Will be X at startup
 
-   /* verilator lint_off INITIALDLY */
    initial begin
-      startpulse <= 1;
+      startpulse = 1;
    end
-   /* verilator lint_on INITIALDLY */
 
    always @ (posedge startpulse) begin
       $write("*-* All Finished *-*\n");
