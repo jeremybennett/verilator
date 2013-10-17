@@ -16,21 +16,24 @@
 // without warranty, 2013 by ____YOUR_NAME_HERE____.
 
 module t (/*AUTOARG*/
-	  // Outputs
-	  a,
-	  b,
 	  // Inputs
-	  clk,
-	  c
+	  clk
    );
-   output a;
-   output b;
-   input clk;
-   input c;
+   input  clk;
+
+   reg    a;
+   reg	  r = 1'b1;
 
    always @(*) begin
-      a = b;
-      b = c;
+      a = r;
+      r = 1'b0;
+   end
+
+   always @(posedge clk) begin
+      if (a == 1'b1) begin
+	 $write("*-* All Finished *-*\n");
+	 $finish;
+      end
    end
 
 endmodule
