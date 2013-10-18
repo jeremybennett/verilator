@@ -411,7 +411,9 @@ public:
 	MODULETEMP,
 	STMTTEMP,
 	XTEMP,
-	IFACEREF	// Used to link Interfaces between modules
+	IFACEREF,	// Used to link Interfaces between modules
+	IMPORT,		// Used for tasks/functions in modports
+	EXPORT
     };
     enum en m_e;
     inline AstVarType () : m_e(UNKNOWN) {}
@@ -426,7 +428,7 @@ public:
 	    "TRIWIRE","TRI0","TRI1",
 	    "PORT",
 	    "BLOCKTEMP","MODULETEMP","STMTTEMP","XTEMP",
-	    "IFACEREF"};
+	    "IFACEREF", "IMPORT", "EXPORT"};
 	return names[m_e]; }
     bool isSignal() const  { return (m_e==WIRE || m_e==IMPLICITWIRE
 				     || m_e==TRIWIRE

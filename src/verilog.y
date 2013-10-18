@@ -1058,23 +1058,22 @@ modport_item<nodep>:			// ==IEEE: modport_item
 		id/*new-modport*/ '(' modportPortsDeclList ')'		{ $$ = new AstModport($2,*$1,$3); }
 	;
 
-modportPortsDeclList<modportvarrefp>:
-		modportPortsDecl			    { $$ = $1; }
-	|	modportPortsDeclList ',' modportPortsDecl   { $$ = $1->addNextNull($3)->castModportVarRef(); }
+modportPortsDeclList<nodep>:
+		modportPortsDeclSimple			    { $$ = $1; }
+	|	modportPortsDeclFt			    { $$ = $1; }
+	|	modportPortsDeclList ',' modportPortsDeclSimple   { $$ = $1->addNextNull($3)->castModportVarRef(); }
+	|	modportPortsDeclList ',' modportPortsDeclFt   { $$ = $1->addNextNull($3)->castModportFTaskRef(); }
 	;
 
 // IEEE: modport_ports_declaration  + modport_simple_ports_declaration
 //	+ (modport_tf_ports_declaration+import_export) + modport_clocking_declaration
 // We've expanded the lists each take to instead just have standalone ID ports.
-// We track the type as with the V2k series of defines, then create as each ID is seen.
-modportPortsDecl<modportvarrefp>:
+// We track the type as with the V2k series of defines, then create as each ID
+//	is seen.
+// Split into two, to allow separate typing for import/export
+modportPortsDeclSimple<modportvarrefp>:
 	//			// IEEE: modport_simple_ports_declaration
 		port_direction modportSimplePort	{ $$ = new AstModportVarRef($<fl>1,*$2,GRAMMARP->m_varIO); }
-	//			// IEEE: modport_clocking_declaration
-	//UNSUP	yCLOCKING idAny/*clocking_identifier*/	{ }
-	//UNSUP	yIMPORT modport_tf_port			{ }
-	//UNSUP	yEXPORT modport_tf_port			{ }
-	// Continuations of above after a comma.
 	//			// IEEE: modport_simple_ports_declaration
 	|	modportSimplePort			{ $$ = new AstModportVarRef($<fl>1,*$1,AstVarType::INOUT); }
 	;
@@ -1083,6 +1082,20 @@ modportSimplePort<strp>:	// IEEE: modport_simple_port or modport_tf_port, depend
 		id					{ $$ = $1; }
 	//UNSUP	'.' idAny '(' ')'			{ }
 	//UNSUP	'.' idAny '(' expr ')'			{ }
+	;
+
+// IEEE: modport_ports_declaration  + modport_simple_ports_declaration
+//	+ (modport_tf_ports_declaration+import_export) + modport_clocking_declaration
+// This is the task/function part.
+modportPortsDeclFt<modportftaskrefp>:
+	//			// IEEE: modport_clocking_declaration
+	//UNSUP	yCLOCKING idAny/*clocking_identifier*/	{ }
+				// IEEE: modport_tf_ports_declaration
+	|	yIMPORT id				{ $$ = new AstModportFTaskRef($<fl>1,*$2,AstVarType::IMPORT); }
+	//UNSUP	yIMPORT method_prototype		{ }
+	//UNSUP	yEXPORT modport_tf_port			{ }
+	// Continuations of above after a comma.
+	//			// IEEE: modport_simple_ports_declaration
 	;
 
 //************************************************

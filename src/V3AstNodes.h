@@ -1371,6 +1371,27 @@ struct AstIface : public AstNodeModule {
     ASTNODE_NODE_FUNCS(Iface, IFACE)
 };
 
+struct AstModportFTaskRef : public AstNode {
+    // A reference to a task or function exported or imported under a
+    // modport.
+private:
+    string		m_name;		// Name of the task/function referenced.
+    AstVarType		m_type;		// Type of the task/function (import/output)
+    AstNodeFTask*	m_ftaskp;	// The actual task/function.
+public:
+    AstModportFTaskRef(FileLine* fl, const string& name, AstVarType::en type)
+	: AstNode(fl), m_name(name), m_type(type), m_ftaskp(NULL) { }
+    ASTNODE_NODE_FUNCS(ModportFTaskRef, MODPORTFTASKREF)
+    virtual const char* broken() const { BROKEN_RTN(m_ftaskp && !m_ftaskp->brokeExists()); return NULL; }
+    virtual void dump(ostream& str);
+    AstVarType	varType() const { return m_type; }		// * = Type of task/function
+    virtual string name() const { return m_name; }
+    bool isImport() const { return varType()==AstVarType::IMPORT; }
+    bool isExport() const { return varType()==AstVarType::EXPORT; }
+    AstNodeFTask* ftaskp() const { return m_ftaskp; }		// [After Link] Pointer to task/function
+    void ftaskp(AstNodeFTask* ftaskp) { m_ftaskp=ftaskp; }
+};
+
 struct AstModportVarRef : public AstNode {
     // A input/output/etc variable referenced under a modport
     // The storage for the variable itself is inside the interface, thus this is a reference
@@ -1398,9 +1419,9 @@ struct AstModport : public AstNode {
 private:
     string	m_name;		// Name of the modport
 public:
-    AstModport(FileLine* fl, const string& name, AstModportVarRef* varsp)
+    AstModport(FileLine* fl, const string& name, AstNode* refsp)
 	: AstNode(fl), m_name(name) {
-        addNOp1p(varsp); }
+        addNOp1p(refsp); }
     virtual string name() const { return m_name; }
     virtual bool maybePointedTo() const { return true; }
     ASTNODE_NODE_FUNCS(Modport, MODPORT)
