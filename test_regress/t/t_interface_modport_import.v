@@ -5,16 +5,16 @@
 // This file ONLY is placed into the Public Domain, for any use,
 // without warranty, 2013 by Jeremy Bennett.
 
-interface test_if
-  (
-   // Inputs
-   input logic  clk
-   );
+interface test_if;
+
+   // Interface variable
+   logic 	data;
 
    // Modport
-     modport mp(
-                import myfunc
-		);
+   modport mp(
+              import  myfunc,
+	      output  data
+	      );
 
    function automatic logic myfunc (input logic val);
       begin
@@ -31,20 +31,23 @@ module t (/*AUTOARG*/
    );
    input clk;
 
-   test_if v (.clk (clk));
+   test_if i ();
 
-   testmod testmod_i (.v (v.mp));
+   testmod testmod_i (.clk (clk),
+		      .i (i.mp));
 
 endmodule
 
 
 module testmod
   (
-   test_if.mp  v
+   input clk,
+   test_if.mp  i
    );
 
-   always_comb begin
-      if (v.myfunc (1'b0)) begin
+   always @(posedge clk) begin
+      i.data = 1'b0;
+      if (i.myfunc (1'b0)) begin
 	 $write("*-* All Finished *-*\n");
 	 $finish;
       end

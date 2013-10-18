@@ -1078,7 +1078,7 @@ modportPortsDeclSimple<modportvarrefp>:
 	|	modportSimplePort			{ $$ = new AstModportVarRef($<fl>1,*$1,AstVarType::INOUT); }
 	;
 
-modportSimplePort<strp>:	// IEEE: modport_simple_port or modport_tf_port, depending what keyword was earlier
+modportSimplePort<strp>:	// IEEE: modport_simple_port
 		id					{ $$ = $1; }
 	//UNSUP	'.' idAny '(' ')'			{ }
 	//UNSUP	'.' idAny '(' expr ')'			{ }
@@ -1091,11 +1091,15 @@ modportPortsDeclFt<modportftaskrefp>:
 	//			// IEEE: modport_clocking_declaration
 	//UNSUP	yCLOCKING idAny/*clocking_identifier*/	{ }
 				// IEEE: modport_tf_ports_declaration
-	|	yIMPORT id				{ $$ = new AstModportFTaskRef($<fl>1,*$2,AstVarType::IMPORT); }
-	//UNSUP	yIMPORT method_prototype		{ }
+		yIMPORT modportFTaskPort		{ $$ = new AstModportFTaskRef($<fl>1,*$2,AstVarType::IMPORT); }
 	//UNSUP	yEXPORT modport_tf_port			{ }
 	// Continuations of above after a comma.
 	//			// IEEE: modport_simple_ports_declaration
+	;
+
+modportFTaskPort<strp>:		// IEEE: modport_tf_port, 
+		id					{ $$ = $1; }
+	//UNSUP	method_prototype			{ }
 	;
 
 //************************************************

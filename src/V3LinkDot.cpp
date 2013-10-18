@@ -1225,6 +1225,20 @@ class LinkDotIfaceVisitor : public AstNVisitor {
 	    nodep->unlinkFrBack(); pushDeletep(nodep); nodep=NULL;
 	}
     }
+    virtual void visit(AstModportFTaskRef* nodep, AstNUser*) {
+	UINFO(5,"   fiv: "<<nodep<<endl);
+	nodep->iterateChildren(*this);
+	VSymEnt* symp = m_curSymp->findIdFallback(nodep->name());
+	if (!symp) {
+	    nodep->v3error("Modport item not found: "<<nodep->prettyName());
+	} else if (AstNodeFTask* ftaskp = symp->nodep()->castNodeFTask()) {
+	    // Make symbol under modport that points at the _interface_'s func/task, not the modport.
+	    nodep->ftaskp(ftaskp);
+	    m_statep->insertSym(m_curSymp, nodep->name(), ftaskp, NULL/*package*/);
+	} else {
+	    nodep->v3error("Modport item is not a function or task: "<<nodep->prettyName());
+	}
+    }
     virtual void visit(AstNode* nodep, AstNUser*) {
 	// Default: Just iterate
 	nodep->iterateChildren(*this);
