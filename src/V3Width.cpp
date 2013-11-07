@@ -852,7 +852,7 @@ private:
 			       || nodep->dtypeSkipRefp()->castNodeClassDType())) {
 	    nodep->v3error("Unsupported: Inputs and outputs must be simple data types");
 	}
-	if (nodep->dtypeSkipRefp()->castConstDType()) {
+	if (nodep->dtypep()->skipRefToConstp()->castConstDType()) {
 	    nodep->isConst(true);
 	}
 	// Parameters if implicit untyped inherit from what they are assigned to
@@ -1088,7 +1088,9 @@ private:
 	if (nodep->didWidthAndSet()) return;  // This node is a dtype & not both PRELIMed+FINALed
 	UINFO(5,"   NODECLASS "<<nodep<<endl);
 	//if (debug()>=9) nodep->dumpTree("-class-in--");
-	if (!nodep->packed()) nodep->v3error("Unsupported: Unpacked struct/union");
+	if (!nodep->packed()) {
+	    nodep->v3warn(UNPACKED, "Unsupported: Unpacked struct/union");
+	}
 	nodep->iterateChildren(*this);  // First size all members
 	nodep->repairMemberCache();
 	// Determine bit assignments and width
@@ -2251,12 +2253,16 @@ private:
     void widthCheck (AstNode* nodep, const char* side,
 		     AstNode* underp, AstNodeDType* expDTypep,
 		     bool ignoreWarn=false) {
-	//UINFO(9,"wchk "<<side<<endl<<"  "<<nodep<<endl<<"  "<<underp<<endl<<"  e"<<expWidth<<" m"<<expWidthMin<<" i"<<ignoreWarn<<endl);
+	//UINFO(9,"wchk "<<side<<endl<<"  "<<nodep<<endl<<"  "<<underp<<endl<<"  e="<<expDTypep<<" i"<<ignoreWarn<<endl);
 	int expWidth = expDTypep->width();
 	int expWidthMin = expDTypep->widthMin();
 	if (expWidthMin==0) expWidthMin = expWidth;
 	bool bad = widthBad(underp,expWidth,expWidthMin);
-	if (bad && fixAutoExtend(underp/*ref*/,expWidth)) bad=false;  // Changes underp
+	if ((bad || underp->width() !=expWidth)
+	    && fixAutoExtend(underp/*ref*/,expWidth)) {
+	    underp=NULL; // Changes underp
+	    return;
+	}
 	if (underp->castConst() && underp->castConst()->num().isFromString()
 	    && expWidth > underp->width()
 	    && (((expWidth - underp->width()) % 8) == 0)) {  // At least it's character sized
