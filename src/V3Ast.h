@@ -1160,7 +1160,7 @@ public:
     void	dumpTree(const string& indent, int maxDepth=0) { dumpTree(cout,indent,maxDepth); }
     void	dumpTreeGdb(); // For GDB only
     void	dumpTreeAndNext(ostream& str=cout, const string& indent="    ", int maxDepth=0);
-    void	dumpTreeFile(const string& filename, bool append=false);
+    void	dumpTreeFile(const string& filename, bool append=false, bool doDump=true);
     static void	dumpTreeFileGdb(const char* filenamep=NULL);
 
     // METHODS - queries
@@ -1542,6 +1542,7 @@ public:
     virtual bool hasDType() const { return true; }
     virtual AstBasicDType* basicp() const = 0;  // (Slow) recurse down to find basic data type
     virtual AstNodeDType* skipRefp() const = 0;  // recurses over typedefs to next non-typeref type
+    virtual AstNodeDType* skipRefToConstp() const = 0;  // recurses over typedefs to next non-typeref-or-const type
     virtual int widthAlignBytes() const = 0; // (Slow) recurses - Structure alignment 1,2,4 or 8 bytes (arrays affect this)
     virtual int widthTotalBytes() const = 0; // (Slow) recurses - Width in bytes rounding up 1,2,4,8,12,...
     virtual bool maybePointedTo() const { return true; }
@@ -1591,12 +1592,14 @@ public:
     // For basicp() we reuse the size to indicate a "fake" basic type of same size
     virtual AstBasicDType* basicp() const { return findLogicDType(width(),width(),numeric())->castBasicDType(); }
     virtual AstNodeDType* skipRefp() const { return (AstNodeDType*)this; }
+    virtual AstNodeDType* skipRefToConstp() const { return (AstNodeDType*)this; }
     virtual int widthAlignBytes() const; // (Slow) recurses - Structure alignment 1,2,4 or 8 bytes (arrays affect this)
     virtual int widthTotalBytes() const; // (Slow) recurses - Width in bytes rounding up 1,2,4,8,12,...
     // op1 = members
     AstMemberDType* membersp() const { return op1p()->castMemberDType(); } // op1 = AstMember list
     void addMembersp(AstNode* nodep) { addNOp1p(nodep); }
     bool packed() const { return m_packed; }
+    bool packedUnsup() const { return true; }  // packed() but as don't support unpacked, presently all structs
     void clearCache() { m_members.clear(); }
     void repairMemberCache();
     AstMemberDType* findMember(const string& name) const {
@@ -1645,6 +1648,7 @@ public:
     // METHODS
     virtual AstBasicDType* basicp() const { return subDTypep()->basicp(); }  // (Slow) recurse down to find basic data type
     virtual AstNodeDType* skipRefp() const { return (AstNodeDType*)this; }
+    virtual AstNodeDType* skipRefToConstp() const { return (AstNodeDType*)this; }
     virtual int widthAlignBytes() const { return subDTypep()->widthAlignBytes(); }
     virtual int widthTotalBytes() const { return elementsConst() * subDTypep()->widthTotalBytes(); }
     int		msb() const;
