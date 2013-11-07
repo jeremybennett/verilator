@@ -5,9 +5,25 @@ indicates the contributor was also the author of the fix; Thanks!
 
 * Verilator 3.854 devel
 
+***   Add UNPACKED warning to convert unpacked structs. [Jeremy Bennett]
+
+****  Support vpi_get of vpiSuppressVal, bug687. [Varun Koyyalagunta]
+
+****  Support vpi_get_time, bug688. [Varun Koyyalagunta]
+
+****  Fix evaluation of chained parameter functions, bug684. [Ted Campbell]
+
+****  Fix enum value extension of '1.
+
 ****  Fix multiple VPI variable callbacks, bug679. [Rich Porter]
 
 ****  Fix vpi_get of vpiSize, bug680. [Rich Porter]
+
+****  Fix vpi_remove_cb inside callback, bug689. [Varun Koyyalagunta]
+
+****  Fix crash with coverage of structures, bug691. [Eivind Liland]
+
+****  Fix array assignment from const var, bug693. [Jie Xu]
 
 
 * Verilator 3.853 2013-09-30
