@@ -340,7 +340,11 @@ public:
     }
     static void cbReasonRemove(VerilatedVpioCb* cbp) {
 	VpioCbList& cbObjList = s_s.m_cbObjLists[cbp->reason()];
-        cbObjList.remove(cbp);
+	// We do not remove it now as we may be iterating the list,
+	// instead set to NULL and will cleanup later
+	for (VpioCbList::iterator it=cbObjList.begin(); it!=cbObjList.end(); ++it) {
+            if (*it == cbp) *it = NULL;
+	}
     }
     static void cbTimedRemove(VerilatedVpioCb* cbp) {
 	VpioTimedCbs::iterator it=s_s.m_timedCbs.find(make_pair(cbp->time(),cbp));
@@ -371,8 +375,11 @@ public:
     static void callCbs(vluint32_t reason) {
 	VpioCbList& cbObjList = s_s.m_cbObjLists[reason];
 	for (VpioCbList::iterator it=cbObjList.begin(); it!=cbObjList.end();) {
-	    VerilatedVpioCb* vop = *it;
-	    ++it;  // iterator may be deleted by callback
+	    if (VL_UNLIKELY(!*it)) { // Deleted earlier, cleanup
+		it = cbObjList.erase(it);
+		continue;
+	    }
+	    VerilatedVpioCb* vop = *it++;
 	    VL_DEBUG_IF_PLI(VL_PRINTF("-vltVpi:  reason_callback %d %p\n",reason,vop););
 	    (vop->cb_rtnp()) (vop->cb_datap());
 	}
@@ -381,8 +388,11 @@ public:
 	VpioCbList& cbObjList = s_s.m_cbObjLists[cbValueChange];
         set<VerilatedVpioVar*> update; // set of objects to update after callbacks
 	for (VpioCbList::iterator it=cbObjList.begin(); it!=cbObjList.end();) {
-	    VerilatedVpioCb* vop = *it;
-	    ++it;  // iterator may be deleted by callback
+	    if (VL_UNLIKELY(!*it)) { // Deleted earlier, cleanup
+		it = cbObjList.erase(it);
+		continue;
+	    }
+	    VerilatedVpioCb* vop = *it++;
 	    if (VerilatedVpioVar* varop = VerilatedVpioVar::castp(vop->cb_datap()->obj)) {
 		void* newDatap = varop->varDatap();
 		void* prevDatap = varop->prevDatap();  // Was malloced when we added the callback
@@ -1015,6 +1025,8 @@ void vpi_get_value(vpiHandle object, p_vpi_value value_p) {
 			      VL_FUNC, VerilatedVpiError::strFromVpiVal(value_p->format), vop->fullname());
 		return;
 	    }
+	} else if (value_p->format == vpiSuppressVal) {
+	    return;
 	}
         _VL_VPI_ERROR(__FILE__, __LINE__, "%s: Unsupported format (%s) as requested for %s",
 		      VL_FUNC, VerilatedVpiError::strFromVpiVal(value_p->format), vop->fullname());
@@ -1306,7 +1318,21 @@ void vpi_put_value_array(vpiHandle object, p_vpi_arrayvalue arrayvalue_p,
 // time processing
 
 void vpi_get_time(vpiHandle object, p_vpi_time time_p) {
-    _VL_VPI_UNIMP(); return;
+    if (VL_UNLIKELY(!time_p)) {
+	_VL_VPI_WARNING(__FILE__, __LINE__, "Ignoring vpi_get_time with NULL value pointer");
+	return;
+    }
+    if (time_p->type == vpiSimTime) {
+	QData qtime = VL_TIME_Q();
+	IData itime[2];
+	VL_SET_WQ(itime, qtime);
+	time_p->low = itime[0];
+	time_p->high = itime[1];
+	return;
+    }
+    _VL_VPI_ERROR(__FILE__, __LINE__, "%s: Unsupported type (%d)",
+		  VL_FUNC, time_p->type);
+    return;
 }
 
 // I/O routines
