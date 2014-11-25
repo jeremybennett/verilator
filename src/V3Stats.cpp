@@ -54,7 +54,8 @@ private:
     V3Double0		m_statPred[AstBranchPred::_ENUM_END];	// Nodes of given type
     V3Double0		m_statInstr;		// Instruction count
     V3Double0		m_statInstrFast;	// Instruction count
-    vector<V3Double0>	m_statVarWidths;	// Variables of given type
+    vector<V3Double0>	m_statVarWidths;	// Variables of given width
+    vector<vector<string> >	m_statVarWidthNames;	// Var names of given width
     V3Double0		m_statVarArray;		// Statistic tracking
     V3Double0		m_statVarBytes;		// Statistic tracking
     V3Double0		m_statVarClock;		// Statistic tracking
@@ -100,8 +101,10 @@ private:
 	    else m_statVarBytes += nodep->dtypeSkipRefp()->widthTotalBytes();
 	    if (int(m_statVarWidths.size()) <= nodep->width()) {
 		m_statVarWidths.resize(nodep->width()+5);
+		m_statVarWidthNames.resize(nodep->width()+5);
 	    }
 	    ++ m_statVarWidths.at(nodep->width());
+	    m_statVarWidthNames.at(nodep->width()).push_back(nodep->name());
 	}
     }
     virtual void visit(AstVarScope* nodep, AstNUser*) {
@@ -208,8 +211,13 @@ public:
 	}
 	for (unsigned i=0; i<m_statVarWidths.size(); i++) {
 	    if (double count = double(m_statVarWidths.at(i))) {
-		ostringstream os; os<<"Vars, width "<<setw(4)<<dec<<i;
+		ostringstream os; os<<"Vars, width "<<setw(5)<<dec<<i;
 		V3Stats::addStat(m_stage, os.str(), count);
+		for (unsigned j=0; j<m_statVarWidthNames.at(i).size(); j++) {
+		    ostringstream os2; os2<<"Vars, width "<<setw(5)<<dec<<i<<" name "
+					  <<m_statVarWidthNames.at(i).at(j);
+		    V3Stats::addStat(m_stage, os2.str(), 1);
+		}
 	    }
 	}
 	// Node types
