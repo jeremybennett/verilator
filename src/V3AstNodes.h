@@ -4706,8 +4706,9 @@ private:
     bool	m_dpiExport:1;		// From dpi export
     bool	m_dpiExportWrapper:1;	// From dpi export; static function with dispatch table
     bool	m_dpiImport:1;		// From dpi import
+    FileLine*   m_refFl;		// Calling context file line
 public:
-    AstCFunc(FileLine* fl, const string& name, AstScope* scopep, const string& rtnType="")
+    AstCFunc(FileLine* fl, const string& name, AstScope* scopep, const string& rtnType="", FileLine* refFl=NULL)
 	: AstNode(fl) {
 	m_funcType = AstCFuncType::FT_NORMAL;
 	m_scopep = scopep;
@@ -4726,6 +4727,7 @@ public:
 	m_dpiExport = false;
 	m_dpiExportWrapper = false;
 	m_dpiImport = false;
+	m_refFl = refFl;
     }
     ASTNODE_NODE_FUNCS(CFunc, CFUNC)
     virtual string name()	const { return m_name; }
@@ -4776,6 +4778,7 @@ public:
     void	dpiExportWrapper(bool flag) { m_dpiExportWrapper = flag; }
     bool	dpiImport() const { return m_dpiImport; }
     void	dpiImport(bool flag) { m_dpiImport = flag; }
+    FileLine*   refFl() const { return m_refFl; }
     //
     // If adding node accessors, see below emptyBody
     AstNode*	argsp() 	const { return op1p()->castNode(); }

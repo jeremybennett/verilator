@@ -1302,7 +1302,7 @@ void OrderVisitor::processMoveOne(OrderMoveVertex* vertexp, OrderMoveDomScope* d
 	}
 	if (!m_pomNewFuncp && domainp != m_deleteDomainp) {
 	    string name = cfuncName(modp, domainp, scopep, nodep);
-	    m_pomNewFuncp = new AstCFunc(nodep->fileline(), name, scopep);
+	    m_pomNewFuncp = new AstCFunc(nodep->fileline(), name, scopep, "", nodep->fileline());
 	    m_pomNewFuncp->argTypes(EmitCBaseVisitor::symClassVar());
 	    m_pomNewFuncp->symProlog(true);
 	    m_pomNewStmts = 0;
