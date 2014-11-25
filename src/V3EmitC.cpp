@@ -829,6 +829,24 @@ class EmitCImp : EmitCStmts {
 	splitSizeInc(nodep);
 
 	puts("\n");
+
+	// Put #file and #line directives
+	if (v3Global.opt.profileCFuncs()) {
+	    string file = nodep->name();
+	    std::size_t found = file.find("__PROF__");
+	    if (found!=std::string::npos) {
+		file.erase(0,found+8);
+		std::size_t rfound = file.rfind("__l");
+		if (rfound!=std::string::npos) {
+		    string line=file;
+		    line.erase (0,rfound+3);
+		    file.erase(file.begin()+rfound,file.end());
+
+		    puts("#line "+line+" \""+file+".v\"\n");
+		}
+	    }
+	}
+
 	puts(nodep->rtnTypeVoid()); puts(" ");
 	puts(modClassName(m_modp)+"::"+nodep->name()
 	     +"("+cFuncArgs(nodep)+") {\n");
