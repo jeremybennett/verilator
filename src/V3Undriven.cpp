@@ -229,9 +229,13 @@ private:
 
     // STATE
     vector<UndrivenVarEntry*>	m_entryps[3];	// Nodes to delete when we are finished
-    bool		m_markBoth;	// Mark as driven+used
+    bool		m_markBoth;	// Mark as driven+used (only used for black-box calls)
     AstNodeFTask*	m_taskp;	// Current task
     AstAlways*		m_alwaysp;	// Current always
+    AstVarRef*		m_selVarRefp;	// The varref inside a nested SEL
+    int                 m_selLsb;	// Running lsb inside nested SEL
+    int                 m_selWidth;	// Running width inside nested SEL
+    bool		m_nestedSel;	// Is this a nested select?
 
     // METHODS
     static int debug() {
@@ -288,21 +292,65 @@ private:
 	nodep->iterateChildren(*this);
     }
     virtual void visit(AstSel* nodep, AstNUser*) {
+	// Structs mean we can get nested selects, and we only want to mark
+	// the finally selected bits.
 	AstVarRef* varrefp = nodep->fromp()->castVarRef();
+	AstSel* selp = nodep->fromp()->castSel();
 	AstConst* constp = nodep->lsbp()->castConst();
 	if (varrefp && constp && !constp->num().isFourState()) {
+	    int lsb = constp->toUInt();
 	    for (int usr=1; usr<(m_alwaysp?3:2); ++usr) {
-		UndrivenVarEntry* entryp = getEntryp (varrefp->varp(), usr);
-		int lsb = constp->toUInt();
-		if (m_markBoth || varrefp->lvalue()) {
-		    // Don't warn if already driven earlier as "a=0; if(a) a=1;" is fine.
-		    if (usr==2 && m_alwaysp && entryp->isUsedNotDrivenBit(lsb, nodep->width())) {
-			UINFO(9," Select.  Entryp="<<(void*)entryp<<endl);
-			warnAlwCombOrder(varrefp);
+		if (m_nestedSel) {
+		    m_selVarRefp = varrefp;
+		    m_selLsb = lsb;
+		    m_selWidth = nodep->width();
+		} else {
+		    UndrivenVarEntry* entryp = getEntryp (varrefp->varp(), usr);
+		    if (m_markBoth || varrefp->lvalue()) {
+			// Don't warn if already driven earlier as "a=0; if(a) a=1;" is fine.
+			if (usr==2 && m_alwaysp && entryp->isUsedNotDrivenBit(lsb, nodep->width())) {
+			    UINFO(9," Select.  Entryp="<<(void*)entryp<<endl);
+			    warnAlwCombOrder(varrefp);
+			}
+			UINFO(9," Select lsb="<<lsb<<", width="<<nodep->width()<<endl);
+			entryp->drivenBit(lsb, nodep->width());
 		    }
-		    entryp->drivenBit(lsb, nodep->width());
+		    if (m_markBoth || !varrefp->lvalue())
+			entryp->usedBit(lsb, nodep->width());
 		}
-		if (m_markBoth || !varrefp->lvalue()) entryp->usedBit(lsb, nodep->width());
+	    }
+	} else if (selp && constp && !constp->num().isFourState()) {
+	    // Nested select, iterate before considering
+	    bool oldNestedSel = m_nestedSel;
+	    m_nestedSel = true;
+	    nodep->iterateChildren(*this);
+	    m_nestedSel = oldNestedSel;
+
+	    if (m_selVarRefp) {
+		for (int usr=1; usr<(m_alwaysp?3:2); ++usr) {
+		    m_selLsb += constp->toUInt();
+		    m_selWidth = nodep->width();
+		    if (!m_nestedSel) {
+			// Top of nest
+			UndrivenVarEntry* entryp = getEntryp (m_selVarRefp->varp(), usr);
+			if (m_markBoth || m_selVarRefp->lvalue()) {
+			    // Don't warn if already driven earlier as "a=0; if(a) a=1;" is fine.
+			    if (usr==2 && m_alwaysp
+				&& entryp->isUsedNotDrivenBit(m_selLsb, m_selWidth)) {
+				UINFO(9," Select.  Entryp="<<(void*)entryp<<endl);
+				warnAlwCombOrder(varrefp);
+			    }
+			    UINFO(9," Select nested lsb="<<m_selLsb<<", width="<<m_selWidth<<endl);
+			    entryp->drivenBit(m_selLsb, m_selWidth);
+			}
+			if (m_markBoth || !m_selVarRefp->lvalue())
+			    entryp->usedBit(m_selLsb, m_selWidth);
+		    }
+		}
+		// Clear the data
+		m_selVarRefp = NULL;
+		m_selLsb = 0;
+		m_selWidth = 0;
 	    }
 	} else {
 	    // else other varrefs handled as unknown mess in AstVarRef
@@ -374,6 +422,10 @@ public:
 	m_markBoth = false;
 	m_taskp = NULL;
 	m_alwaysp = NULL;
+	m_selVarRefp = NULL;
+	m_selLsb = 0;
+        m_selWidth = 0;
+        m_nestedSel = false;
 	nodep->accept(*this);
     }
     virtual ~UndrivenVisitor() {
