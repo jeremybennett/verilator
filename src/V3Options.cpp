@@ -761,6 +761,8 @@ void V3Options::parseOptsList(FileLine* fl, const string& optdir, int argc, char
 	    else if ( onoff   (sw, "-skip-identical", flag/*ref*/) )	{ m_skipIdentical = flag; }
 	    else if ( !strcmp (sw, "-sp") )				{ m_outFormatOk = true; m_systemC = true; m_systemPerl = true; }
 	    else if ( onoff   (sw, "-stats", flag/*ref*/) )		{ m_stats = flag; }
+	    else if ( onoff   (sw, "-extra-stats", flag/*ref*/) )	{ m_extraStats = flag;
+									  m_stats |= flag; }
 	    else if ( !strcmp (sw, "-sv") )				{ m_defaultLanguage = V3LangCode::L1800_2005; }
 	    else if ( onoff   (sw, "-trace", flag/*ref*/) )		{ m_trace = flag; }
 	    else if ( onoff   (sw, "-trace-dups", flag/*ref*/) )	{ m_traceDups = flag; }
@@ -1228,6 +1230,7 @@ V3Options::V3Options() {
     m_savable = false;
     m_skipIdentical = true;
     m_stats = false;
+    m_extraStats = false;
     m_systemC = false;
     m_systemPerl = false;
     m_trace = false;

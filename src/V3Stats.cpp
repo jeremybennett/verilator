@@ -101,14 +101,17 @@ private:
 	    else m_statVarBytes += nodep->dtypeSkipRefp()->widthTotalBytes();
 	    if (int(m_statVarWidths.size()) <= nodep->width()) {
 		m_statVarWidths.resize(nodep->width()+5);
-		m_statVarWidthNames.resize(nodep->width()+5);
+		if (v3Global.opt.extraStats()) m_statVarWidthNames.resize(nodep->width()+5);
 	    }
 	    ++ m_statVarWidths.at(nodep->width());
 	    string pn = nodep->prettyName();
-	    if (m_statVarWidthNames.at(nodep->width()).find(pn)!=m_statVarWidthNames.at(nodep->width()).end())
-		m_statVarWidthNames.at(nodep->width())[pn]++;
-	    else
-		m_statVarWidthNames.at(nodep->width())[pn]=1;
+	    if (v3Global.opt.extraStats()) {
+		if (m_statVarWidthNames.at(nodep->width()).find(pn)!=
+		    m_statVarWidthNames.at(nodep->width()).end()) {
+		    m_statVarWidthNames.at(nodep->width())[pn]++;
+		} else
+		    m_statVarWidthNames.at(nodep->width())[pn]=1;
+	    }
 	}
     }
     virtual void visit(AstVarScope* nodep, AstNUser*) {
@@ -215,9 +218,15 @@ public:
 	}
 	for (unsigned i=0; i<m_statVarWidths.size(); i++) {
 	    if (double count = double(m_statVarWidths.at(i))) {
-		for (map<string,int>::iterator it=m_statVarWidthNames.at(i).begin();it!=m_statVarWidthNames.at(i).end();it++) {
-		    ostringstream os; os<<"Vars, width "<<setw(5)<<dec<<i<<" "<<it->first;
-		    V3Stats::addStat(m_stage, os.str(), it->second);
+		if (v3Global.opt.extraStats()) {
+		    for (map<string,int>::iterator it=m_statVarWidthNames.at(i).begin();
+			 it!=m_statVarWidthNames.at(i).end();it++) {
+			ostringstream os; os<<"Vars, width "<<setw(5)<<dec<<i<<" "<<it->first;
+			V3Stats::addStat(m_stage, os.str(), it->second);
+		    }
+		} else {
+		    ostringstream os; os<<"Vars, width "<<setw(5)<<dec<<i;
+		    V3Stats::addStat(m_stage, os.str(), count);
 		}
 	    }
 	}
